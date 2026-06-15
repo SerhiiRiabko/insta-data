@@ -1,0 +1,107 @@
+# ============================================
+# INSTA-DATA — Git Ignore Rules
+# ============================================
+
+# 🔐 Environment & Credentials
+.env
+.env.local
+.env.*.local
+backend/instagram_session.json
+backend/.env
+
+# 📦 Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+.Python
+
+# 🏗️ Build outputs
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.vite/
+out/
+.next/
+
+# 💾 IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# 📝 Logs & Temp
+*.log
+logs/
+tmp/
+temp/
+.env.test
+bot.log
+app.log
+
+# 🗄️ Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+mongo_data/
+redis_data/
+
+# 🖼️ Images & Media
+/backend/images/
+/backend/uploads/
+*.jpg
+*.jpeg
+*.png
+*.gif
+!docs/**/*.png
+!docs/**/*.jpg
+
+# 📊 Test coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# 🐳 Docker
+docker-compose.override.yml
+
+# 🌐 Node
+.npm
+.eslintcache
+.stylelintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 🔧 OS
+.AppleDouble
+.LSOverride
+ehthumbs.db
+desktop.ini
+
+# 🎵 Audio/Video
+*.mp4
+*.mov
+*.avi
+*.wav
+
+# 🚫 Never commit these
+config.py  # Local config with real credentials
+settings.local.json
+.env.production
+instagram_session.json

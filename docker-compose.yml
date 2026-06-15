@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  # 🗄️ MongoDB — Primary database (products, prices, wishlist)
+  mongo:
+    image: mongo:7.0
+    container_name: insta-data-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-admin}
+      MONGO_INITDB_DATABASE: ${MONGODB_DB:-insta_data}
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    healthcheck:
+      test: echo 'db.adminCommand("ping")' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insta-data-network
+    restart: unless-stopped
+
+  # 🐘 PostgreSQL — Timeseries database (price history)
+  postgres:
+    image: postgres:16-alpine
+    container_name: insta-data-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: ${POSTGRES_DB:-insta_data_history}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insta-data-network
+    restart: unless-stopped
+
+  # 🔴 Redis — Cache and session store
+  redis:
+    image: redis:7-alpine
+    container_name: insta-data-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insta-data-network
+    restart: unless-stopped
+
+  # 🔵 Backend API (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: insta-data-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database connections
+      MONGODB_URL: ${MONGODB_URL:-mongodb://admin:admin@mongo:27017}
+      MONGODB_DB: ${MONGODB_DB:-insta_data}
+      POSTGRES_URL: ${POSTGRES_URL:-postgresql://admin:admin@postgres:5432/insta_data_history}
+      REDIS_URL: ${REDIS_URL:-redis://:redis_password@redis:6379}
+
+      # Backend config
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8000
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # Instagram (for scrapers)
+      INSTAGRAM_EMAIL: ${INSTAGRAM_EMAIL}
+      INSTAGRAM_PASSWORD: ${INSTAGRAM_PASSWORD}
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__  # Exclude pycache from mount
+    depends_on:
+      mongo:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - insta-data-network
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ⚪ Frontend (Next.js) — Development only
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: insta-data-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_APP_NAME: Insta-Data
+      NODE_ENV: ${ENVIRONMENT:-development}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Exclude node_modules from mount
+      - /app/.next         # Exclude .next from mount
+    depends_on:
+      - backend
+    networks:
+      - insta-data-network
+    restart: unless-stopped
+    command: npm run dev
+
+  # 🌐 Nginx — Reverse proxy (optional, for production-like setup)
+  nginx:
+    image: nginx:alpine
+    container_name: insta-data-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # Self-signed certs for HTTPS
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - insta-data-network
+    restart: unless-stopped
+
+networks:
+  insta-data-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    driver: local
+  mongo_config:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
