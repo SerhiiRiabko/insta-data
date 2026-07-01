@@ -8,7 +8,7 @@
 
 **Мета:** Автоматичний моніторинг цін товарів харчування через Instagram + офіційні сайти магазинів Чорногорії.
 
-**Статус:** Phase 0 — Ініціалізація (2026-06-15)
+**Статус:** Phase 0 — Landing Variant A ✅ (2026-07-01)
 
 **Tech Stack:**
 - **Frontend:** Next.js 15 + React 19 + Tailwind 4 + Framer Motion
@@ -173,17 +173,21 @@ source venv/Scripts/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 alembic upgrade head
 
-# 5. Run backend
-python main.py
+# 5. Run backend (Docker)
+docker-compose up -d backend
 
-# 6. Frontend setup (в новому terminal)
-cd frontend
-npm install
-npm run dev
+# 6. Run frontend (Docker)
+docker-compose up -d frontend
 
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000
-# API Docs: http://localhost:8000/docs
+# LOCAL DEVELOPMENT PORTS (reserved):
+# Frontend: http://localhost:3001  ← Docker port (Next.js)
+# Backend API: http://localhost:8001  ← Docker port (FastAPI)
+# API Docs: http://localhost:8001/docs
+# MongoDB: localhost:27017
+# PostgreSQL: localhost:5432
+# Redis: localhost:6379
+# 
+# ⭐ SEE ALSO: PORTS.md for complete port assignments & troubleshooting
 ```
 
 ---
@@ -279,24 +283,21 @@ npm run type-check
 
 ---
 
-## 📚 Документація (Читай ЦЕ при старті!)
+## 📚 Документація (ОБОВ'ЯЗКОВО прочитай!)
 
-Коли повертаєшся до проекту:
+**⭐ ЧИТАЙ ПЕРШИМ:** `ARCHITECTURE.md`
+- Повна архітектура проекту
+- Data flow сценарії
+- API endpoints specification
+- Database schemas
+- Service descriptions
+- Deployment strategy
 
-1. **Читай ПЕРШИМ:** `docs/PROJECT_INFO.md`
-   - Статус проекту
-   - Прийняті рішення
-   - Наступні кроки
+**Потім (якщо потрібна деталь):**
 
-2. **Потім:** `docs/BUSINESS_LOGIC.md`
-   - User Stories
-   - Workflow'и
-   - Data models
-
-3. **Потім:** `docs/TECHNOLOGY.md`
-   - Tech stack
-   - Архітектура
-   - Рішення чому
+1. **`PORTS.md`** ← 🔴 **MUST READ** — Зарезервовані портови (3001, 8001, etc.) + troubleshooting
+2. **`PLAN.md`** — Детальний план реалізації всіх фаз
+3. **`docs/PROJECT_INFO.md`** — Статус, рішення, наступні кроки
 
 ---
 
@@ -406,28 +407,41 @@ LanguageSelector ← UKR/RUS/MNE switcher
 
 ## 📞 Next Steps
 
-- [ ] Phase 0: Ініціалізація (CURRENT)
+- [x] **Phase 0: Frontend Landing Page** ✅ (DONE 2026-07-01)
   - [x] Структура папок
   - [x] .env.example
   - [x] .gitignore
   - [x] CLAUDE.md
-  - [ ] docker-compose.yml
-  - [ ] Backend skeleton
-  - [ ] Frontend skeleton
+  - [x] PORTS.md (3001/8001 зарезервовано)
+  - [x] LandingPageDesignBrief.tsx (Variant A)
+  - [x] PriceMatrixLanding.tsx (price table)
+  - [x] ProductsModal, StoresModal, AboutModal
+  - [x] Responsive table layout
+  - [x] i18n (RU/UK/EN translations)
+
+**Зроблено 2026-07-01:**
+- ✅ Variant A дизайн (photo-forward hero з floating matrix)
+- ✅ Центрування та позиціонування таблиці
+- ✅ Розширення колонок: product (35%), store prices (13% кожна), cheapest (16%)
+- ✅ Запущено на localhost:3000
   
 - [ ] Phase 1: Instagram Parser POC
   - [ ] instagrapi login
-  - [ ] Post scraping
-  - [ ] OCR + regex
+  - [ ] Post scraping (48 годин)
+  - [ ] OCR + regex для vitяу товарів
   - [ ] Image normalization
-  - [ ] Unit tests
+  - [ ] Unit tests & validation
 
 - [ ] Phase 2: Web Scrapers (4 магазини)
-- [ ] Phase 3: Backend API
-- [ ] Phase 4: Frontend UI
-- [ ] Phase 5: Integration & Testing
+  - [ ] Playwright for JS rendering
+  - [ ] BeautifulSoup for HTML parsing
+  - [ ] Deduplication logic
+  - [ ] Parallel execution
+
+- [ ] Phase 3: Backend API (FastAPI)
+- [ ] Phase 4: Integration & Testing
 
 ---
 
-**Остання оновлена:** 2026-06-15
+**Остання оновлена:** 2026-07-01
 **Автор:** Serhii Riabko
