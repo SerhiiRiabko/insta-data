@@ -301,6 +301,25 @@ npm run type-check
 
 ---
 
+## 🎨 Frontend Components (Monte-Shop-Price Landing)
+
+### Core Components
+| Component | File | Purpose | Status |
+|-----------|------|---------|--------|
+| **LandingPageDesignBrief** | `src/components/LandingPageDesignBrief.tsx` | Main landing page (Variant A) | ✅ Done |
+| **PriceMatrixLanding** | `src/components/PriceMatrixLanding.tsx` | Price comparison table | ✅ Done |
+| **ProductsModal** | `src/components/ProductsModal.tsx` | Products listing dialog | ✅ Scaffolded |
+| **StoresModal** | `src/components/StoresModal.tsx` | Stores info dialog | ✅ Scaffolded |
+| **AboutModal** | `src/components/AboutModal.tsx` | About project dialog | ✅ Scaffolded |
+
+### Design System
+- **Colors:** Accent #0b6e4f, Deep #0f3d2e, Cheapest #d8f3e3
+- **Typography:** Plus Jakarta Sans (UI), Space Grotesk (prices)
+- **Spacing:** 44px sections, 10-16px table cells
+- **Breakpoints:** Designed for 1280px desktop (responsive via `tableLayout: fixed`)
+
+---
+
 ## 🔄 Update Documentation After Each Task
 
 **ВАЖНО:** Після кожної доробки / спрінту оновлюємо документи:
@@ -419,11 +438,44 @@ LanguageSelector ← UKR/RUS/MNE switcher
   - [x] Responsive table layout
   - [x] i18n (RU/UK/EN translations)
 
-**Зроблено 2026-07-01:**
-- ✅ Variant A дизайн (photo-forward hero з floating matrix)
-- ✅ Центрування та позиціонування таблиці
-- ✅ Розширення колонок: product (35%), store prices (13% кожна), cheapest (16%)
-- ✅ Запущено на localhost:3000
+**Зроблено 2026-07-01 (Commit 0e1a83f):**
+- ✅ **LandingPageDesignBrief.tsx** — Variant A implementation
+  - Photo-forward hero section (Kotor Bay foto + linear-gradient 180deg overlay)
+  - Центрований hero контент: kicker pill → H1 (58px/800) → tagline → search bar
+  - Floating price matrix (margin-top: 40px, centered, max-width: 1400px)
+  - White header: logo (M) | nav (Товари/Магазины/О проєкте) | language pills (RU/UK/EN)
+  - Modal dialogs: ProductsModal, StoresModal, AboutModal (scaffolded)
+  
+- ✅ **PriceMatrixLanding.tsx** — Price comparison table
+  - Fixed header bar "Товар | Обновлено сегодня" (100% width, fixed positioning)
+  - Table layout: `tableLayout: fixed` + column widths
+    - Product: 24% (product name + unit)
+    - Store 1-4: 16% кожна (Aroma, Voli, HDL, IDEA)
+    - Cheapest summary: 12% (best price + store name)
+  - Cheapest cell highlighting: #d8f3e3 bg + #05603a text + 3px green border
+  - No horizontal scroll (overflow: hidden)
+  - Responsive padding & font sizes (optimized for 1280px width)
+  
+- ✅ **Layout fixes:**
+  - Removed `overflow-x-auto` (horizontal scroll)
+  - Added `boxSizing: border-box` to prevent overflow
+  - Centered table with `display: flex` + `justify-content: center`
+  - Max-width 1400px constraint
+  - Full table width within bounds (no exceeding page edges)
+
+- ✅ **Styling per design handoff:**
+  - Colors: #0b6e4f (accent), #0f3d2e (deep), #d8f3e3 (cheapest bg), #f6faf8 (header bg)
+  - Typography: Plus Jakarta Sans (UI) + Space Grotesk (prices)
+  - Spacing: 44px horizontal padding (page level), 10-16px table padding
+  - Border radii: card 18px, pills 999px, inputs 10px, badges 7px
+  - Shadows: table card shadow (0 28px 64px -30px rgba(6,78,59,0.4))
+
+- ✅ **i18n support:**
+  - RU/UK/EN translations for all UI strings
+  - Localized price formatting: EUR with comma (RU/UK) or period (EN)
+  - Language switcher in header (3 buttons with active/inactive states)
+
+- ✅ **Testing:** Running on localhost:3000 (Next.js dev server)
   
 - [ ] Phase 1: Instagram Parser POC
   - [ ] instagrapi login
