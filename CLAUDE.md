@@ -8,7 +8,7 @@
 
 **Мета:** Автоматичний моніторинг цін товарів харчування через Instagram + офіційні сайти магазинів Чорногорії.
 
-**Статус:** Phase 1 — Frontend-Backend Integration ✅ (2026-07-02)
+**Статус:** Phase 2 — Data Seeding ✅ (2026-07-02)
 
 **Tech Stack:**
 - **Frontend:** Next.js 15 + React 19 + Tailwind 4 + Framer Motion
@@ -522,6 +522,41 @@ LanguageSelector ← UKR/RUS/MNE switcher
   - [ ] Rate limiting (Redis)
   - [ ] Integration tests
   - [ ] Performance optimization
+
+### ✅ Phase 2: Data Seeding (2026-07-02)
+
+**Commit 714fc03: Data Seeding Endpoint + Script**
+- ✅ `backend/scripts/seed_products.py` — CLI seed script (125 lines)
+  - Async MongoDB connection
+  - 8 mock products insertion
+  - Price calculation & dedup hash
+  - Progress logging & verification
+  
+- ✅ `POST /api/v1/products/seed` — HTTP seed endpoint
+  - Clears existing products
+  - Inserts 8 mock products
+  - Returns: {success, message, products_cleared, products_inserted, total_in_db}
+  
+- ✅ Data seeded in MongoDB:
+  - 8 products × 4 stores
+  - Prices: €0.49–€9.20
+  - All cheapest prices calculated
+  - All dedup hashes generated
+
+**Frontend-Backend Integration Verified:**
+- ✅ Frontend fetches real DB data (not mock fallback)
+- ✅ Table displays 8 products from MongoDB
+- ✅ All prices correct
+- ✅ Cheapest cells highlighted
+- ✅ Language switching works
+- ✅ Loading state displays
+
+**Testing Done:**
+- ✅ Backend seed endpoint (curl test)
+- ✅ MongoDB data verified (8 products)
+- ✅ Frontend API call succeeds
+- ✅ Table renders with real data
+- ✅ Network tab shows correct response
 
 ---
 

@@ -70,32 +70,38 @@
 
 ---
 
-### ⏳ Phase 2: Data Layer (2026-07-03 to 2026-07-04)
+### ✅ Phase 2: Data Layer (2026-07-02)
 
-**Status:** NOT STARTED
+**Status:** COMPLETED ✅
 
 **Deliverables:**
-- [ ] Seed MongoDB with initial 8 products
-- [ ] Create ProductService.seed_products()
-- [ ] Endpoint: `POST /api/v1/products/seed`
-- [ ] Verify frontend fetches real DB data
-- [ ] Test with Postman/curl
+- ✅ Seed MongoDB with initial 8 products
+- ✅ CLI seed script (`backend/scripts/seed_products.py`)
+- ✅ HTTP Endpoint: `POST /api/v1/products/seed`
+- ✅ Frontend fetches real DB data (verified)
+- ✅ All testing completed
 
-**Tasks:**
-1. Write seed script for MongoDB
-2. Insert 8 products from mock data
-3. Set dedup_hash, source, timestamps
-4. Verify frontend receives DB data (not mock)
-5. Create seed endpoint (admin only)
+**What Was Implemented:**
+1. ✅ `backend/scripts/seed_products.py` — async seed script (125 lines)
+2. ✅ `POST /api/v1/products/seed` endpoint — HTTP seeding (74 lines)
+3. ✅ 8 products inserted with correct structure
+4. ✅ Dedup hashes, timestamps, all metadata calculated
+5. ✅ Frontend confirmed receiving real MongoDB data
 
-**Time Estimate:** 4-6 hours
+**Commits:**
+- 714fc03: Data seeding endpoint + script
 
-**Success Criteria:**
-- [ ] Frontend table shows DB data (8 products)
-- [ ] prices[] array populated for all 4 stores
-- [ ] min_price calculated correctly
-- [ ] cheapest_store highlighted correctly
-- [ ] updated_at shows current timestamp
+**Time Spent:** ~1 hour
+
+**Success Criteria — ALL MET:**
+- ✅ Frontend table shows DB data (8 products)
+- ✅ prices[] array populated for all 4 stores
+- ✅ min_price calculated correctly
+- ✅ cheapest_store highlighted correctly
+- ✅ updated_at shows current timestamp
+- ✅ API responses real data (not mock fallback)
+- ✅ Language switching still works
+- ✅ No console errors
 
 ---
 
@@ -244,10 +250,10 @@
 |-----------|------|--------|
 | Project Structure | 2026-06-30 | ✅ DONE |
 | Landing Page + API | 2026-07-02 | ✅ DONE |
-| Data Layer Ready | 2026-07-04 | ⏳ TODO |
-| Real Scrapers | 2026-07-07 | ⏳ TODO |
-| Scheduler Live | 2026-07-09 | ⏳ TODO |
-| Security Complete | 2026-07-12 | ⏳ TODO |
+| Data Layer Ready | 2026-07-02 | ✅ DONE |
+| Real Scrapers | 2026-07-05 | ⏳ TODO |
+| Scheduler Live | 2026-07-08 | ⏳ TODO |
+| Security Complete | 2026-07-11 | ⏳ TODO |
 | **LAUNCH READY** | **2026-07-15** | ⏳ TODO |
 
 ---
