@@ -36,6 +36,10 @@ export const productsAPI = {
   priceMatrix: (lang: 'ru' | 'uk' | 'en' = 'ru') =>
     api.get('/products/matrix', { params: { lang } }),
 
+  // Phase 3: Live scraper data from all 5 sources (67 products)
+  priceMatrixLive: () =>
+    api.get('/products/matrix-live'),
+
   list: (limit: number = 50, skip: number = 0) =>
     api.get('/products/list', { params: { limit, skip } }),
 };

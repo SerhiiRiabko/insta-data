@@ -46,6 +46,7 @@ const MOCK_STORES = [
   { name: 'Voli', initial: 'V', color: '#2563eb' },
   { name: 'HDL', initial: 'H', color: '#d97706' },
   { name: 'IDEA', initial: 'I', color: '#0891b2' },
+  { name: 'Instagram', initial: 'IG', color: '#e1306c' }, // Phase 3: 5th source
 ];
 
 const TRANSLATIONS = {
@@ -70,7 +71,7 @@ const TRANSLATIONS = {
     searchBtn: 'Знайти',
     nav: ['Товари', 'Магазини', 'Про проєкт'],
     tableTitle: 'Порівняння цін',
-    tableSub: 'по 4 супермаркетах',
+    tableSub: 'по 5 джерелам (4 магазини + Instagram)',
     product: 'Товар',
     cheapest: 'Найдешевше',
     updated: 'Оновлено сьогодні',
@@ -362,12 +363,35 @@ export function LandingPageDesignBrief() {
 
   const t = TRANSLATIONS[lang];
 
-  // Fetch price matrix from backend
+  // Fetch price matrix from backend (Phase 3: Live scraper data)
   useEffect(() => {
     const fetchMatrix = async () => {
       try {
         setLoading(true);
 
+        // Try live endpoint first (67 products from 5 sources)
+        try {
+          const response = await productsAPI.priceMatrixLive();
+          const data = response.data;
+
+          if (data && data.stores && data.products) {
+            setStores(data.stores);
+            setProducts(
+              data.products.map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                unit: p.unit,
+                prices: p.prices,
+              }))
+            );
+            console.log(`Loaded ${data.products.length} products from live endpoint`);
+            return;
+          }
+        } catch (liveErr) {
+          console.warn('Live endpoint failed, falling back to mock:', liveErr);
+        }
+
+        // Fallback to old endpoint if live fails
         const response = await productsAPI.priceMatrix(lang);
         const data = response.data;
 
@@ -391,7 +415,7 @@ export function LandingPageDesignBrief() {
     };
 
     fetchMatrix();
-  }, [lang]);
+  }, []);
 
   const onProductsClick = useCallback(() => setIsProductsOpen(true), []);
   const onStoresClick = useCallback(() => setIsStoresOpen(true), []);
