@@ -33,6 +33,7 @@ pytesseract==0.3.10    # OCR for price extraction
 playwright==1.40.0
 beautifulsoup4==4.12.2
 requests==2.31.0
+aiohttp==3.9.1
 
 # 📊 Data Processing
 pandas==2.1.3

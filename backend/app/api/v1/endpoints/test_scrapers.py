@@ -37,9 +37,10 @@ async def test_aroma_scraper() -> TestScraperResponse:
     start_time = time.time()
 
     try:
-        from app.services.scrapers.aroma_scraper import AromaScraper
+        # Use mock scraper for testing (no internet access)
+        from app.services.scrapers.aroma_mock_scraper import AromaMockScraper
 
-        scraper = AromaScraper()
+        scraper = AromaMockScraper()
         logger.info("🔄 Testing Aroma scraper...")
 
         products = await scraper.scrape()
