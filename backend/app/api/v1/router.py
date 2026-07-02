@@ -1,16 +1,15 @@
 """API v1 router - includes all endpoints"""
 
 from fastapi import APIRouter
-
-# Import endpoint routers when created
-# from app.api.v1.endpoints import prices, search, wishlist
+from app.api.v1.endpoints import instagram, scrapers, search, products
 
 api_router = APIRouter()
 
 # Include routers
-# api_router.include_router(prices.router, prefix="/prices", tags=["prices"])
-# api_router.include_router(search.router, prefix="/search", tags=["search"])
-# api_router.include_router(wishlist.router, prefix="/wishlist", tags=["wishlist"])
+api_router.include_router(products.router)  # Frontend integration (Phase 1)
+api_router.include_router(search.router)
+api_router.include_router(instagram.router)
+api_router.include_router(scrapers.router)
 
 
 @api_router.get("/status")

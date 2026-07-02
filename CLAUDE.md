@@ -424,6 +424,59 @@ LanguageSelector ← UKR/RUS/MNE switcher
 
 ---
 
+## 🔧 Backend Development Status (2026-07-02)
+
+### ✅ Backend Implemented
+- FastAPI app structure (main.py, lifespan manager, CORS)
+- Config system (Settings from .env: MongoDB, PostgreSQL, Redis, Instagram)
+- Search API endpoints (6+ methods: /products, /price, /cheapest, /trending, /source, /stats, /mock)
+- Database schemas (MongoDB + PostgreSQL models)
+- Services scaffolded (auth, scraper, price_extractor, product_service, search_service, store_scrapers, orchestrator)
+
+### ✅ Phase 1: Frontend Integration (2026-07-02)
+
+**New Endpoints Implemented:**
+- ✅ `GET /api/v1/products/matrix` — price matrix for landing table
+  - Query params: `lang=ru|uk|en`
+  - Returns: stores, products (rows), updated_at, total_products
+  - Fallback: mock data if DB empty
+  
+- ✅ `GET /api/v1/products/list` — product list with prices
+  - Query params: `limit=50, skip=0`
+  - Returns: products, total_count, updated_at
+  - Fallback: mock data (8 products)
+
+**Helper Functions:**
+- `calculate_cheapest()` — find min price & cheapest store
+- `format_product_row()` — convert DB/mock product to API response
+
+**Schemas:**
+- `StorePrice`, `ProductRow`, `PriceMatrixResponse`
+- `ProductListItem`, `ProductListResponse`
+
+**Next:**
+- [ ] Connect frontend search bar to backend
+- [ ] Test via Postman/curl
+  
+- **Phase 2: Mock Data** (Tomorrow)
+  - [ ] Seed MongoDB with 8 products (from landing mock data)
+  - [ ] Test endpoints via Postman
+  
+- **Phase 3: Real Scrapers** (Days 3-5)
+  - [ ] Aroma.me, Voli.me, HDL.me, IDEA.me (Playwright + BeautifulSoup)
+  - [ ] Instagram scraper (instagrapi + OCR)
+  
+- **Phase 4: Background Tasks** (Days 6-7)
+  - [ ] 24h auto-scan scheduler
+  - [ ] Retry logic + error handling
+  
+- **Phase 5: Security & Polish** (Days 8-9)
+  - [ ] JWT authentication
+  - [ ] Rate limiting
+  - [ ] Integration tests
+
+---
+
 ## 📞 Next Steps
 
 - [x] **Phase 0: Frontend Landing Page** ✅ (DONE 2026-07-01)
