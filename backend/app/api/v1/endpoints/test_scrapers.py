@@ -4,7 +4,7 @@ Test endpoint for Phase 3 scrapers - for debugging and manual testing
 
 import logging
 import asyncio
-from typing import List
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -13,13 +13,23 @@ router = APIRouter(prefix="/test-scrapers", tags=["test-scrapers"])
 
 
 class TestScraperResponse(BaseModel):
-    """Response from test scraper"""
+    """Response from single scraper test"""
     scraper: str
     status: str  # "success", "failed"
     products: int
     sample_products: List[dict]
     error: str = None
     duration_seconds: float = None
+
+
+class OrchestratorResponse(BaseModel):
+    """Response from orchestrator (all scrapers)"""
+    status: str  # "success", "partial", "failed"
+    timestamp: str
+    total_products: int
+    by_store: Dict[str, Any]
+    errors: List[str]
+    duration_seconds: float
 
 
 @router.post("/aroma", response_model=TestScraperResponse)
@@ -213,4 +223,45 @@ async def test_idea_scraper() -> TestScraperResponse:
             sample_products=[],
             error=str(e),
             duration_seconds=duration,
+        )
+
+
+@router.post("/run-all", response_model=OrchestratorResponse)
+async def run_all_scrapers() -> OrchestratorResponse:
+    """
+    Run all 4 store scrapers in parallel.
+
+    Response includes:
+    - status: "success", "partial", or "failed"
+    - total_products: sum of all products found
+    - by_store: results for each store (status, products, samples, error, duration)
+    - errors: list of errors from failed scrapers
+    - duration_seconds: total time
+    """
+    try:
+        from app.services.scrapers.orchestrator import ScraperOrchestrator
+
+        orchestrator = ScraperOrchestrator()
+        logger.info("Running all scrapers in parallel...")
+
+        result = await orchestrator.run_all()
+
+        return OrchestratorResponse(
+            status=result.get("status", "failed"),
+            timestamp=result.get("timestamp", ""),
+            total_products=result.get("total_products", 0),
+            by_store=result.get("by_store", {}),
+            errors=result.get("errors", []),
+            duration_seconds=result.get("duration_seconds", 0),
+        )
+
+    except Exception as e:
+        logger.error(f"Orchestrator failed: {e}", exc_info=True)
+        return OrchestratorResponse(
+            status="failed",
+            timestamp="",
+            total_products=0,
+            by_store={},
+            errors=[str(e)],
+            duration_seconds=0,
         )
