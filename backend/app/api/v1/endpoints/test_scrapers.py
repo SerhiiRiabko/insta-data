@@ -77,3 +77,50 @@ async def test_aroma_scraper() -> TestScraperResponse:
             error=str(e),
             duration_seconds=duration,
         )
+
+
+@router.post("/voli", response_model=TestScraperResponse)
+async def test_voli_scraper() -> TestScraperResponse:
+    """Test Voli.me scraper"""
+    import time
+    start_time = time.time()
+
+    try:
+        from app.services.scrapers.voli_mock_scraper import VoliMockScraper
+
+        scraper = VoliMockScraper()
+        logger.info("Testing Voli scraper...")
+
+        products = await scraper.scrape()
+        duration = time.time() - start_time
+
+        logger.info(f"Voli test: {len(products)} products in {duration:.1f}s")
+
+        sample = []
+        for p in products[:3]:
+            sample.append({
+                "name": p.name,
+                "price": p.price,
+                "source": p.source,
+                "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
+            })
+
+        return TestScraperResponse(
+            scraper="Voli",
+            status="success",
+            products=len(products),
+            sample_products=sample,
+            duration_seconds=duration,
+        )
+
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(f"Voli test failed: {e}", exc_info=True)
+        return TestScraperResponse(
+            scraper="Voli",
+            status="failed",
+            products=0,
+            sample_products=[],
+            error=str(e),
+            duration_seconds=duration,
+        )
