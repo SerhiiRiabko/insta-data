@@ -124,3 +124,93 @@ async def test_voli_scraper() -> TestScraperResponse:
             error=str(e),
             duration_seconds=duration,
         )
+
+
+@router.post("/hdl", response_model=TestScraperResponse)
+async def test_hdl_scraper() -> TestScraperResponse:
+    """Test HDL.me scraper"""
+    import time
+    start_time = time.time()
+
+    try:
+        from app.services.scrapers.hdl_mock_scraper import HDLMockScraper
+
+        scraper = HDLMockScraper()
+        logger.info("Testing HDL scraper...")
+
+        products = await scraper.scrape()
+        duration = time.time() - start_time
+
+        sample = []
+        for p in products[:3]:
+            sample.append({
+                "name": p.name,
+                "price": p.price,
+                "source": p.source,
+                "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
+            })
+
+        return TestScraperResponse(
+            scraper="HDL",
+            status="success",
+            products=len(products),
+            sample_products=sample,
+            duration_seconds=duration,
+        )
+
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(f"HDL test failed: {e}", exc_info=True)
+        return TestScraperResponse(
+            scraper="HDL",
+            status="failed",
+            products=0,
+            sample_products=[],
+            error=str(e),
+            duration_seconds=duration,
+        )
+
+
+@router.post("/idea", response_model=TestScraperResponse)
+async def test_idea_scraper() -> TestScraperResponse:
+    """Test IDEA.me scraper"""
+    import time
+    start_time = time.time()
+
+    try:
+        from app.services.scrapers.idea_mock_scraper import IDEAMockScraper
+
+        scraper = IDEAMockScraper()
+        logger.info("Testing IDEA scraper...")
+
+        products = await scraper.scrape()
+        duration = time.time() - start_time
+
+        sample = []
+        for p in products[:3]:
+            sample.append({
+                "name": p.name,
+                "price": p.price,
+                "source": p.source,
+                "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
+            })
+
+        return TestScraperResponse(
+            scraper="IDEA",
+            status="success",
+            products=len(products),
+            sample_products=sample,
+            duration_seconds=duration,
+        )
+
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(f"IDEA test failed: {e}", exc_info=True)
+        return TestScraperResponse(
+            scraper="IDEA",
+            status="failed",
+            products=0,
+            sample_products=[],
+            error=str(e),
+            duration_seconds=duration,
+        )

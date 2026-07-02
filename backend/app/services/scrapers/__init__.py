@@ -12,9 +12,13 @@ Implements scrapers for:
 from app.services.scrapers.aroma_scraper import AromaScraper
 from app.services.scrapers.aroma_mock_scraper import AromaMockScraper
 from app.services.scrapers.voli_mock_scraper import VoliMockScraper
+from app.services.scrapers.hdl_mock_scraper import HDLMockScraper
+from app.services.scrapers.idea_mock_scraper import IDEAMockScraper
 
 __all__ = [
     "AromaScraper",
     "AromaMockScraper",
     "VoliMockScraper",
+    "HDLMockScraper",
+    "IDEAMockScraper",
 ]
