@@ -20,16 +20,17 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { PriceMatrixLanding } from './PriceMatrixLanding';
 import { ProductsModal } from './ProductsModal';
 import { StoresModal } from './StoresModal';
 import { AboutModal } from './AboutModal';
+import { productsAPI } from '@/lib/api';
 
 type Lang = 'ru' | 'uk' | 'en';
 
-// Mock product data — per design handoff
-const PRODUCTS = [
+// Mock product data — fallback when backend unavailable
+const MOCK_PRODUCTS = [
   { name: 'Молоко / Молоко / Milk', unit: '1 л', prices: [1.49, 1.45, 1.52, 1.39] },
   { name: 'Хлеб / Хліб / Bread', unit: '500 г', prices: [0.89, 0.95, 0.85, 0.92] },
   { name: 'Яйца / Яйця / Eggs', unit: '10 шт', prices: [2.49, 2.39, 2.55, 2.45] },
@@ -40,7 +41,7 @@ const PRODUCTS = [
   { name: 'Вода / Вода / Water', unit: '1,5 л', prices: [0.55, 0.59, 0.49, 0.52] },
 ];
 
-const STORES = [
+const MOCK_STORES = [
   { name: 'Aroma', initial: 'A', color: '#e11d48' },
   { name: 'Voli', initial: 'V', color: '#2563eb' },
   { name: 'HDL', initial: 'H', color: '#d97706' },
@@ -99,6 +100,9 @@ function VariationA({
   onProductsClick,
   onStoresClick,
   onAboutClick,
+  products,
+  stores,
+  loading,
 }: {
   lang: Lang;
   setLang: (lang: Lang) => void;
@@ -106,6 +110,9 @@ function VariationA({
   onProductsClick: () => void;
   onStoresClick: () => void;
   onAboutClick: () => void;
+  products: any[];
+  stores: any[];
+  loading: boolean;
 }) {
   return (
     <div style={{ backgroundColor: '#f5f3f0', minHeight: '100vh' }}>
@@ -321,7 +328,21 @@ function VariationA({
         }}
       >
         <div style={{ width: '100%', maxWidth: '1400px' }}>
-          <PriceMatrixLanding products={PRODUCTS} stores={STORES} lang={lang} accent="#0b6e4f" />
+          {loading ? (
+            <div
+              style={{
+                background: 'white',
+                borderRadius: '18px',
+                padding: '24px',
+                textAlign: 'center',
+                color: '#999',
+              }}
+            >
+              Завантажуємо ціни...
+            </div>
+          ) : (
+            <PriceMatrixLanding products={products} stores={stores} lang={lang} accent="#0b6e4f" />
+          )}
         </div>
       </div>
     </div>
@@ -333,7 +354,44 @@ export function LandingPageDesignBrief() {
   const [isProductsOpen, setIsProductsOpen] = useState(false);
   const [isStoresOpen, setIsStoresOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+
+  // Backend Integration (Phase 1)
+  const [products, setProducts] = useState(MOCK_PRODUCTS);
+  const [stores, setStores] = useState(MOCK_STORES);
+  const [loading, setLoading] = useState(true);
+
   const t = TRANSLATIONS[lang];
+
+  // Fetch price matrix from backend
+  useEffect(() => {
+    const fetchMatrix = async () => {
+      try {
+        setLoading(true);
+
+        const response = await productsAPI.priceMatrix(lang);
+        const data = response.data;
+
+        if (data && data.stores && data.products) {
+          setStores(data.stores);
+          setProducts(
+            data.products.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              unit: p.unit,
+              prices: p.prices,
+            }))
+          );
+        }
+      } catch (err) {
+        console.error('Failed to fetch price matrix:', err);
+        // Keep mock data as fallback
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMatrix();
+  }, [lang]);
 
   const onProductsClick = useCallback(() => setIsProductsOpen(true), []);
   const onStoresClick = useCallback(() => setIsStoresOpen(true), []);
@@ -348,13 +406,16 @@ export function LandingPageDesignBrief() {
         onProductsClick={onProductsClick}
         onStoresClick={onStoresClick}
         onAboutClick={onAboutClick}
+        products={products}
+        stores={stores}
+        loading={loading}
       />
 
       {/* Modals */}
       <ProductsModal
         isOpen={isProductsOpen}
         onClose={() => setIsProductsOpen(false)}
-        products={PRODUCTS}
+        products={products}
         lang={lang}
       />
       <StoresModal isOpen={isStoresOpen} onClose={() => setIsStoresOpen(false)} lang={lang} />
