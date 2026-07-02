@@ -329,9 +329,12 @@ async def get_price_matrix_live() -> PriceMatrixResponse:
 
         for store_name, store_result in orch_result.get("by_store", {}).items():
             if store_result.get("status") == "success":
-                for i, sample in enumerate(store_result.get("samples", [])):
+                # Use all_products instead of samples (get full list, not just first 3)
+                all_products = store_result.get("all_products", [])
+
+                for i, product in enumerate(all_products):
                     # Create product row with price for this store only
-                    prod_id = hashlib.md5(f"{sample['name']}_{store_name}_{i}".encode()).hexdigest()
+                    prod_id = hashlib.md5(f"{product['name']}_{store_name}_{i}".encode()).hexdigest()
 
                     # Find store index
                     store_idx = next((j for j, s in enumerate(MOCK_STORES) if s["name"].lower() == store_name.lower()), -1)
@@ -339,15 +342,15 @@ async def get_price_matrix_live() -> PriceMatrixResponse:
                     # Build price list: all None except this store
                     prices = [None] * len(MOCK_STORES)
                     if store_idx >= 0:
-                        prices[store_idx] = sample["price"]
+                        prices[store_idx] = product["price"]
 
                     product_rows.append(ProductRow(
                         id=prod_id,
-                        name=f"{sample['name']} ({sample['source']})",
+                        name=f"{product['name']} ({product['source']})",
                         unit="1x",
                         prices=prices,
-                        min_price=sample["price"],
-                        cheapest_store=sample["source"],
+                        min_price=product["price"],
+                        cheapest_store=product["source"],
                     ))
 
         logger.info(f"Live scraping: {len(product_rows)} products from {len(orch_result.get('by_store', {}))} sources")

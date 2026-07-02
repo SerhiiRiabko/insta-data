@@ -154,7 +154,7 @@ class ScraperOrchestrator:
         {
             "status": "success" or "failed",
             "products": 15,
-            "samples": [...],
+            "all_products": [{name, price, source, url}, ...],  # All products (not just samples)
             "error": None,
             "duration_seconds": 3.7
         }
@@ -167,10 +167,10 @@ class ScraperOrchestrator:
             products = await scraper.scrape()
             duration = time.time() - start_time
 
-            # Prepare samples
-            samples = []
-            for p in products[:3]:
-                samples.append({
+            # Prepare all products (not just samples)
+            all_prods = []
+            for p in products:
+                all_prods.append({
                     "name": p.name,
                     "price": p.price,
                     "source": p.source,
@@ -180,7 +180,7 @@ class ScraperOrchestrator:
             return {
                 "status": "success",
                 "products": len(products),
-                "samples": samples,
+                "all_products": all_prods,  # All products for aggregation
                 "error": None,
                 "duration_seconds": duration,
             }
@@ -191,7 +191,7 @@ class ScraperOrchestrator:
             return {
                 "status": "failed",
                 "products": 0,
-                "samples": [],
+                "all_products": [],
                 "error": str(e),
                 "duration_seconds": duration,
             }
