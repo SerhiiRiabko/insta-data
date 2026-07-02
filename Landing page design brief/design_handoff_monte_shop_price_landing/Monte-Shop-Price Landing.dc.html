@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;}
+  *{box-sizing:border-box;}
+  input::placeholder{color:#8aa499;}
+</style>
+</helmet>
+<div style="width:max-content;min-width:100%;min-height:100vh;box-sizing:border-box;padding:48px;background:#e7ece9;font-family:'Plus Jakarta Sans',sans-serif;">
+
+  <div style="margin-bottom:36px;">
+    <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#0b6e4f;font-weight:700;">Monte-Shop-Price</div>
+    <div style="font-size:26px;font-weight:800;color:#0f3d2e;margin-top:4px;letter-spacing:-0.02em;">Landing page — 3 варианта</div>
+    <div style="font-size:14px;color:#5b7a6e;margin-top:6px;">Переключите язык в любой шапке (RU / UK / EN) — все три макета синхронизируются.</div>
+  </div>
+
+  <div style="display:flex;gap:56px;align-items:flex-start;">
+
+    <!-- ============ VARIATION A — Floating panel over photo ============ -->
+    <div style="flex:none;width:1280px;">
+      <div style="font-size:13px;font-weight:600;color:#5b7a6e;margin-bottom:12px;letter-spacing:0.02em;">A — Фото-герой с плавающей таблицей</div>
+      <div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;">
+        <div style="position:relative;padding:0 0 150px;background-image:linear-gradient(180deg, rgba(6,78,59,0.5) 0%, rgba(6,78,59,0.22) 38%, rgba(6,78,59,0.82) 100%), url('https://commons.wikimedia.org/wiki/Special:FilePath/Vista_de_Kotor,_Bah%C3%ADa_de_Kotor,_Montenegro,_2014-04-19,_DD_25.JPG?width=2000');background-size:cover;background-position:center 38%;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:24px 44px;">
+            <div style="display:flex;align-items:center;gap:11px;">
+              <span style="width:30px;height:30px;border-radius:9px;background:{{ accent }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;font-family:'Space Grotesk',monospace;">M</span>
+              <span style="color:#fff;font-weight:800;font-size:19px;letter-spacing:-0.01em;">Monte-Shop-Price</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:28px;color:#fff;">
+              <sc-for list="{{ t.nav }}" as="n" hint-placeholder-count="3">
+                <a href="#" style="color:inherit;text-decoration:none;font-size:14px;font-weight:500;opacity:0.92;">{{ n }}</a>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <sc-for list="{{ langsOnPhoto }}" as="L" hint-placeholder-count="3">
+                <button onClick="{{ L.onSelect }}" style="{{ L.style }}">{{ L.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="text-align:center;padding:72px 44px 0;">
+            <div style="display:inline-block;padding:7px 16px;border-radius:999px;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.35);color:#eafaf1;font-size:13px;font-weight:600;letter-spacing:0.03em;">{{ t.kicker }}</div>
+            <h1 style="font-size:58px;font-weight:800;color:#fff;margin:22px 0 0;letter-spacing:-0.025em;text-shadow:0 2px 24px rgba(6,40,28,0.4);">Monte-Shop-Price</h1>
+            <p style="font-size:20px;color:#e0f3ea;margin:16px auto 0;max-width:640px;line-height:1.5;text-shadow:0 1px 12px rgba(6,40,28,0.4);">{{ t.tagline }}</p>
+            <form onSubmit="{{ noSubmit }}" style="margin:34px auto 0;max-width:640px;display:flex;gap:10px;background:#fff;padding:9px;border-radius:16px;box-shadow:0 24px 50px -22px rgba(6,40,28,0.55);">
+              <input placeholder="{{ t.searchPlaceholder }}" style="flex:1;border:none;outline:none;padding:15px 20px;font-size:16px;font-family:inherit;color:#0f3d2e;background:transparent;">
+              <button type="submit" style="background:{{ accent }};color:#fff;border:none;border-radius:11px;padding:0 32px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer;">{{ t.searchBtn }}</button>
+            </form>
+          </div>
+        </div>
+        <div style="margin-top:-118px;padding:0 44px 52px;position:relative;z-index:2;">
+          <dc-import name="MatrixTable" rows="{{ rows }}" stores="{{ stores }}" t="{{ t }}" accent="{{ accent }}" hint-size="100%,600px" style="width:100%;"></dc-import>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VARIATION B — Split hero ============ -->
+    <div style="flex:none;width:1280px;">
+      <div style="font-size:13px;font-weight:600;color:#5b7a6e;margin-bottom:12px;letter-spacing:0.02em;">B — Сплит-герой, таблица на светлом</div>
+      <div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 44px;border-bottom:1px solid #eef4f1;color:#33524a;">
+          <div style="display:flex;align-items:center;gap:11px;">
+            <span style="width:30px;height:30px;border-radius:9px;background:{{ accent }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;font-family:'Space Grotesk',monospace;">M</span>
+            <span style="color:#0f3d2e;font-weight:800;font-size:19px;letter-spacing:-0.01em;">Monte-Shop-Price</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:28px;color:#33524a;">
+            <sc-for list="{{ t.nav }}" as="n" hint-placeholder-count="3">
+              <a href="#" style="color:inherit;text-decoration:none;font-size:14px;font-weight:500;">{{ n }}</a>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <sc-for list="{{ langsOnPaper }}" as="L" hint-placeholder-count="3">
+              <button onClick="{{ L.onSelect }}" style="{{ L.style }}">{{ L.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;align-items:stretch;">
+          <div style="padding:72px 56px;display:flex;flex-direction:column;justify-content:center;background:#f4faf7;">
+            <div style="display:inline-block;align-self:flex-start;padding:7px 16px;border-radius:999px;background:#e3f5ec;color:#0b6e4f;font-size:13px;font-weight:600;letter-spacing:0.03em;">{{ t.kicker }}</div>
+            <h1 style="font-size:50px;font-weight:800;color:#0f3d2e;margin:20px 0 0;letter-spacing:-0.025em;line-height:1.05;">Monte-Shop-Price</h1>
+            <p style="font-size:19px;color:#52736a;margin:16px 0 0;max-width:440px;line-height:1.5;">{{ t.tagline }}</p>
+            <form onSubmit="{{ noSubmit }}" style="margin:32px 0 0;max-width:480px;display:flex;gap:10px;">
+              <input placeholder="{{ t.searchPlaceholder }}" style="flex:1;border:1px solid #cfe2d8;outline:none;padding:15px 18px;font-size:16px;font-family:inherit;color:#0f3d2e;background:#fff;border-radius:12px;">
+              <button type="submit" style="background:{{ accent }};color:#fff;border:none;border-radius:12px;padding:0 30px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer;">{{ t.searchBtn }}</button>
+            </form>
+          </div>
+          <div style="min-height:440px;background-image:linear-gradient(110deg, rgba(6,78,59,0.28) 0%, rgba(6,78,59,0.05) 60%), url('https://commons.wikimedia.org/wiki/Special:FilePath/Vista_de_Kotor,_Bah%C3%ADa_de_Kotor,_Montenegro,_2014-04-19,_DD_25.JPG?width=2000');background-size:cover;background-position:center;"></div>
+        </div>
+        <div style="padding:52px 56px;background:#fff;">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:22px;">
+            <span style="font-size:24px;font-weight:800;color:#0f3d2e;letter-spacing:-0.02em;">{{ t.tableTitle }}</span>
+            <span style="font-size:14px;color:#7d9a8d;">{{ t.tableSub }}</span>
+          </div>
+          <dc-import name="MatrixTable" rows="{{ rows }}" stores="{{ stores }}" t="{{ t }}" accent="{{ accent }}" hint-size="100%,600px" style="width:100%;"></dc-import>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VARIATION C — Immersive header band ============ -->
+    <div style="flex:none;width:1280px;">
+      <div style="font-size:13px;font-weight:600;color:#5b7a6e;margin-bottom:12px;letter-spacing:0.02em;">C — Иммерсивная шапка, таблица крупным планом</div>
+      <div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;">
+        <div style="position:relative;background-image:linear-gradient(125deg, rgba(6,78,59,0.88) 0%, rgba(6,78,59,0.5) 55%, rgba(11,110,79,0.35) 100%), url('https://commons.wikimedia.org/wiki/Special:FilePath/Vista_de_Kotor,_Bah%C3%ADa_de_Kotor,_Montenegro,_2014-04-19,_DD_25.JPG?width=2000');background-size:cover;background-position:center 42%;padding:26px 44px 60px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:11px;">
+              <span style="width:30px;height:30px;border-radius:9px;background:#fff;display:flex;align-items:center;justify-content:center;color:{{ accent }};font-weight:800;font-size:16px;font-family:'Space Grotesk',monospace;">M</span>
+              <span style="color:#fff;font-weight:800;font-size:19px;letter-spacing:-0.01em;">Monte-Shop-Price</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:28px;color:#fff;">
+              <sc-for list="{{ t.nav }}" as="n" hint-placeholder-count="3">
+                <a href="#" style="color:inherit;text-decoration:none;font-size:14px;font-weight:500;opacity:0.92;">{{ n }}</a>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <sc-for list="{{ langsOnPhoto }}" as="L" hint-placeholder-count="3">
+                <button onClick="{{ L.onSelect }}" style="{{ L.style }}">{{ L.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="max-width:680px;padding-top:40px;">
+            <div style="display:inline-block;padding:7px 16px;border-radius:999px;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.35);color:#eafaf1;font-size:13px;font-weight:600;letter-spacing:0.03em;">{{ t.kicker }}</div>
+            <h1 style="font-size:52px;font-weight:800;color:#fff;margin:20px 0 0;letter-spacing:-0.025em;line-height:1.04;">{{ t.heroLine }}</h1>
+            <p style="font-size:19px;color:#e0f3ea;margin:14px 0 0;max-width:540px;line-height:1.5;">{{ t.tagline }}</p>
+            <form onSubmit="{{ noSubmit }}" style="margin:30px 0 0;max-width:560px;display:flex;gap:10px;background:#fff;padding:8px;border-radius:14px;box-shadow:0 20px 44px -20px rgba(6,40,28,0.5);">
+              <input placeholder="{{ t.searchPlaceholder }}" style="flex:1;border:none;outline:none;padding:14px 18px;font-size:16px;font-family:inherit;color:#0f3d2e;background:transparent;">
+              <button type="submit" style="background:{{ accent }};color:#fff;border:none;border-radius:10px;padding:0 30px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer;">{{ t.searchBtn }}</button>
+            </form>
+          </div>
+        </div>
+        <div style="padding:48px 44px 56px;background:#edf6f1;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px;">
+            <sc-for list="{{ stores }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #dceae3;border-radius:999px;padding:7px 14px 7px 8px;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:{{ s.color }};color:#fff;font-family:'Space Grotesk',monospace;font-size:11px;font-weight:700;">{{ s.initial }}</span>
+                <span style="font-size:13px;font-weight:600;color:#33524a;">{{ s.name }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <dc-import name="MatrixTable" rows="{{ rows }}" stores="{{ stores }}" t="{{ t }}" accent="{{ accent }}" hint-size="100%,600px" style="width:100%;"></dc-import>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultLang&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ru&quot;,&quot;uk&quot;,&quot;en&quot;],&quot;default&quot;:&quot;ru&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#0b6e4f&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { lang: null };
+
+  tr = {
+    ru: {
+      kicker: "Цены в реальном времени",
+      tagline: "Сравнение цен на продукты в супермаркетах Черногории",
+      heroLine: "Лучшая цена на продукты в Черногории",
+      searchPlaceholder: "Поиск товара…",
+      searchBtn: "Найти",
+      nav: ["Товары", "Магазины", "О проекте"],
+      tableTitle: "Сравнение цен",
+      tableSub: "по 4 супермаркетам",
+      product: "Товар",
+      cheapest: "Дешевле всего",
+      updated: "Обновлено сегодня",
+    },
+    uk: {
+      kicker: "Ціни в реальному часі",
+      tagline: "Порівняння цін на продукти в супермаркетах Чорногорії",
+      heroLine: "Найкраща ціна на продукти в Чорногорії",
+      searchPlaceholder: "Пошук товару…",
+      searchBtn: "Знайти",
+      nav: ["Товари", "Магазини", "Про проєкт"],
+      tableTitle: "Порівняння цін",
+      tableSub: "по 4 супермаркетах",
+      product: "Товар",
+      cheapest: "Найдешевше",
+      updated: "Оновлено сьогодні",
+    },
+    en: {
+      kicker: "Real-time prices",
+      tagline: "Real-time grocery price comparison across Montenegro",
+      heroLine: "The best grocery prices in Montenegro",
+      searchPlaceholder: "Search a product…",
+      searchBtn: "Search",
+      nav: ["Products", "Stores", "About"],
+      tableTitle: "Price comparison",
+      tableSub: "across 4 supermarkets",
+      product: "Product",
+      cheapest: "Cheapest",
+      updated: "Updated today",
+    },
+  };
+
+  stores = [
+    { name: "Aroma", initial: "A", color: "#e11d48" },
+    { name: "Voli",  initial: "V", color: "#2563eb" },
+    { name: "HDL",   initial: "H", color: "#d97706" },
+    { name: "IDEA",  initial: "I", color: "#0891b2" },
+  ];
+
+  products = [
+    { name: { ru: "Молоко",          uk: "Молоко",          en: "Milk" },        unit: { ru: "1 л",   uk: "1 л",   en: "1 L" },     p: [1.49, 1.45, 1.52, 1.39] },
+    { name: { ru: "Хлеб",            uk: "Хліб",            en: "Bread" },       unit: { ru: "500 г", uk: "500 г", en: "500 g" },   p: [0.89, 0.95, 0.85, 0.92] },
+    { name: { ru: "Яйца",            uk: "Яйця",            en: "Eggs" },        unit: { ru: "10 шт", uk: "10 шт", en: "10 pcs" },  p: [2.49, 2.39, 2.55, 2.45] },
+    { name: { ru: "Сыр Гауда",       uk: "Сир Гауда",       en: "Gouda cheese" },unit: { ru: "1 кг",  uk: "1 кг",  en: "1 kg" },    p: [8.90, 9.20, 8.45, 8.99] },
+    { name: { ru: "Бананы",          uk: "Банани",          en: "Bananas" },     unit: { ru: "1 кг",  uk: "1 кг",  en: "1 kg" },    p: [1.29, 1.19, 1.35, 1.25] },
+    { name: { ru: "Кофе молотый",    uk: "Кава мелена",     en: "Ground coffee" },unit:{ ru: "250 г", uk: "250 г", en: "250 g" },   p: [4.49, 4.29, 4.59, 4.19] },
+    { name: { ru: "Оливковое масло", uk: "Оливкова олія",   en: "Olive oil" },   unit: { ru: "1 л",   uk: "1 л",   en: "1 L" },     p: [6.99, 7.49, 6.79, 7.10] },
+    { name: { ru: "Вода",            uk: "Вода",            en: "Water" },       unit: { ru: "1,5 л", uk: "1,5 л", en: "1.5 L" },   p: [0.55, 0.59, 0.49, 0.52] },
+  ];
+
+  renderVals() {
+    const lang = this.state.lang || this.props.defaultLang || "ru";
+    const accent = this.props.accent || "#0b6e4f";
+    const t = this.tr[lang];
+    const fmt = (n) => lang === "en" ? "€" + n.toFixed(2) : "€ " + n.toFixed(2).replace(".", ",");
+
+    const rows = this.products.map((prod) => {
+      const min = Math.min(...prod.p);
+      const minIdx = prod.p.indexOf(min);
+      const cells = prod.p.map((v) => ({ priceText: fmt(v), cheapest: v === min, normal: v !== min }));
+      return {
+        name: prod.name[lang],
+        unit: prod.unit[lang],
+        cells,
+        best: { priceText: fmt(min), storeName: this.stores[minIdx].name },
+      };
+    });
+
+    const pill = "padding:8px 14px;border-radius:999px;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;transition:all 120ms cubic-bezier(0.2,0,0,1);";
+    const mk = (theme) => ["ru", "uk", "en"].map((code) => {
+      const active = code === lang;
+      let style;
+      if (theme === "photo") {
+        style = pill + (active
+          ? "border:1px solid #fff;background:#fff;color:" + accent + ";font-weight:700;"
+          : "border:1px solid rgba(255,255,255,0.5);background:transparent;color:#fff;");
+      } else {
+        style = pill + (active
+          ? "border:1px solid " + accent + ";background:" + accent + ";color:#fff;font-weight:700;"
+          : "border:1px solid #cddfd6;background:transparent;color:#5b7a6e;");
+      }
+      return { label: code.toUpperCase(), style, onSelect: () => this.setState({ lang: code }) };
+    });
+
+    return {
+      t,
+      accent,
+      stores: this.stores,
+      rows,
+      langsOnPhoto: mk("photo"),
+      langsOnPaper: mk("paper"),
+      noSubmit: (e) => e.preventDefault(),
+    };
+  }
+}
+</script>
+</body>
+</html>

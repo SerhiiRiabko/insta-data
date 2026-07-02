@@ -35,8 +35,8 @@ async def init_postgres_db():
         logger.info("✅ PostgreSQL connected successfully")
 
     except Exception as e:
-        logger.error(f"❌ PostgreSQL connection failed: {e}")
-        raise
+        logger.warning(f"⚠️ PostgreSQL not available: {e}")
+        SessionLocal = None
 
 
 def get_postgres_db():

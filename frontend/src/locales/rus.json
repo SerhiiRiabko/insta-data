@@ -1,0 +1,59 @@
+{
+  "app": {
+    "name": "Monte-Shop-Price",
+    "description": "Сравнение цен всех магазинов Черногории в реальном времени"
+  },
+  "header": {
+    "search": "Поиск товаров",
+    "language": "Язык",
+    "menu": "Меню"
+  },
+  "search": {
+    "placeholder": "Ищите товары по названию...",
+    "button": "Поиск",
+    "results": "Результаты поиска",
+    "noResults": "Товары не найдены"
+  },
+  "tabs": {
+    "instagram": "Instagram",
+    "official": "Официальные сайты",
+    "all": "Все"
+  },
+  "stores": {
+    "aroma": "Aroma",
+    "voli": "Voli",
+    "hdl": "HDL",
+    "idea": "IDEA"
+  },
+  "price": {
+    "min": "Минимальная цена",
+    "max": "Максимальная цена",
+    "currency": "EUR",
+    "cheapest": "Дешевле всего в",
+    "priceHistory": "История цен"
+  },
+  "products": {
+    "name": "Название",
+    "price": "Цена",
+    "store": "Магазин",
+    "updated": "Обновлено",
+    "addToWishlist": "Добавить в желаемое",
+    "removeFromWishlist": "Удалить из желаемого"
+  },
+  "trending": {
+    "title": "Популярные товары",
+    "subtitle": "Последние обновления"
+  },
+  "filters": {
+    "byPrice": "По цене",
+    "byStore": "По магазину",
+    "byCheapest": "Самые дешевые"
+  },
+  "errors": {
+    "loading": "Ошибка загрузки",
+    "search": "Ошибка поиска",
+    "network": "Ошибка сети"
+  },
+  "loading": "Загрузка...",
+  "noData": "Нет данных"
+}

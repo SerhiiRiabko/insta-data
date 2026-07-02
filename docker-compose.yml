@@ -69,7 +69,7 @@ services:
       dockerfile: Dockerfile
     container_name: insta-data-backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       # Database connections
       MONGODB_URL: ${MONGODB_URL:-mongodb://admin:admin@mongo:27017}
@@ -109,7 +109,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: insta-data-frontend
     ports:
-      - "3000:3000"
+      - "3003:3000"
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       NEXT_PUBLIC_APP_NAME: Insta-Data

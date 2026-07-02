@@ -1,5 +1,5 @@
 """
-Insta-data Backend — FastAPI Application
+Monte-Shop-Price Backend — FastAPI Application
 Main entry point for the API
 """
 
@@ -25,25 +25,24 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for startup and shutdown events
     """
     # Startup
-    logger.info("🚀 Starting Insta-data Backend...")
+    logger.info("🚀 Starting Monte-Shop-Price Backend...")
     try:
         await init_mongo_db()
         logger.info("✅ MongoDB connected")
     except Exception as e:
-        logger.error(f"❌ MongoDB connection failed: {e}")
-        raise
+        logger.warning(f"⚠️ MongoDB not available: {e}")
 
     try:
         await init_postgres_db()
         logger.info("✅ PostgreSQL connected")
     except Exception as e:
-        logger.error(f"❌ PostgreSQL connection failed: {e}")
+        logger.warning(f"⚠️ PostgreSQL not available: {e}")
         raise
 
     yield
 
     # Shutdown
-    logger.info("🛑 Shutting down Insta-data Backend...")
+    logger.info("🛑 Shutting down Monte-Shop-Price Backend...")
     try:
         await close_mongo_db()
         logger.info("✅ MongoDB disconnected")
@@ -53,8 +52,8 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Insta-data API",
-    description="Price comparison platform for Montenegrin grocery stores",
+    title="Monte-Shop-Price API",
+    description="Real-time price comparison for Montenegrin grocery stores",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -89,7 +88,7 @@ async def health_check():
 async def root():
     """Root endpoint"""
     return {
-        "message": "Insta-data API is running",
+        "message": "Monte-Shop-Price API is running",
         "docs_url": "/docs",
         "redoc_url": "/redoc",
     }

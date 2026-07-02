@@ -1,7 +1,7 @@
 {
-  "name": "insta-data-frontend",
+  "name": "monte-shop-price-frontend",
   "version": "0.1.0",
-  "description": "Price comparison platform for Montenegrin grocery stores",
+  "description": "Monte-Shop-Price: Real-time price comparison for Montenegrin grocery stores",
   "private": true,
   "scripts": {
     "dev": "next dev",

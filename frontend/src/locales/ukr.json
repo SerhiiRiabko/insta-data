@@ -1,0 +1,59 @@
+{
+  "app": {
+    "name": "Monte-Shop-Price",
+    "description": "Порівняння цін всіх магазинів Чорногорії в реальному часі"
+  },
+  "header": {
+    "search": "Пошук товарів",
+    "language": "Мова",
+    "menu": "Меню"
+  },
+  "search": {
+    "placeholder": "Шукайте товари за назвою...",
+    "button": "Пошук",
+    "results": "Результати пошуку",
+    "noResults": "Товари не знайдені"
+  },
+  "tabs": {
+    "instagram": "Instagram",
+    "official": "Офіційні сайти",
+    "all": "Все"
+  },
+  "stores": {
+    "aroma": "Aroma",
+    "voli": "Voli",
+    "hdl": "HDL",
+    "idea": "IDEA"
+  },
+  "price": {
+    "min": "Мінімальна ціна",
+    "max": "Максимальна ціна",
+    "currency": "EUR",
+    "cheapest": "Найдешевше у",
+    "priceHistory": "Історія цін"
+  },
+  "products": {
+    "name": "Назва",
+    "price": "Ціна",
+    "store": "Магазин",
+    "updated": "Оновлено",
+    "addToWishlist": "Додати до бажаного",
+    "removeFromWishlist": "Видалити з бажаного"
+  },
+  "trending": {
+    "title": "Популярні товари",
+    "subtitle": "Найновіші оновлення"
+  },
+  "filters": {
+    "byPrice": "За ціною",
+    "byStore": "За магазином",
+    "byCheapest": "Найдешевші"
+  },
+  "errors": {
+    "loading": "Помилка завантаження",
+    "search": "Помилка пошуку",
+    "network": "Помилка мережі"
+  },
+  "loading": "Завантаження...",
+  "noData": "Немає даних"
+}

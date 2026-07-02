@@ -1,0 +1,59 @@
+{
+  "app": {
+    "name": "Monte-Shop-Price",
+    "description": "Poređenje cijena svih prodavnica u Crnoj Gori u realnom vremenu"
+  },
+  "header": {
+    "search": "Pretraga proizvoda",
+    "language": "Jezik",
+    "menu": "Meni"
+  },
+  "search": {
+    "placeholder": "Pretražite proizvode po imenu...",
+    "button": "Pretraga",
+    "results": "Rezultati pretrage",
+    "noResults": "Proizvodi nisu pronađeni"
+  },
+  "tabs": {
+    "instagram": "Instagram",
+    "official": "Zvanični sajtovi",
+    "all": "Sve"
+  },
+  "stores": {
+    "aroma": "Aroma",
+    "voli": "Voli",
+    "hdl": "HDL",
+    "idea": "IDEA"
+  },
+  "price": {
+    "min": "Minimalna cijena",
+    "max": "Maksimalna cijena",
+    "currency": "EUR",
+    "cheapest": "Najjeftinije u",
+    "priceHistory": "Istorija cijena"
+  },
+  "products": {
+    "name": "Naziv",
+    "price": "Cijena",
+    "store": "Prodavnica",
+    "updated": "Ažurirano",
+    "addToWishlist": "Dodaj na listu željenih",
+    "removeFromWishlist": "Ukloni sa liste željenih"
+  },
+  "trending": {
+    "title": "Popularni proizvodi",
+    "subtitle": "Najnovija ažuriranja"
+  },
+  "filters": {
+    "byPrice": "Po cijeni",
+    "byStore": "Po prodavnici",
+    "byCheapest": "Najjeftinije"
+  },
+  "errors": {
+    "loading": "Greška pri učitavanju",
+    "search": "Greška pretrage",
+    "network": "Greška mreže"
+  },
+  "loading": "Učitavanje...",
+  "noData": "Nema podataka"
+}
