@@ -14,6 +14,7 @@ from app.services.scrapers.aroma_mock_scraper import AromaMockScraper
 from app.services.scrapers.voli_mock_scraper import VoliMockScraper
 from app.services.scrapers.hdl_mock_scraper import HDLMockScraper
 from app.services.scrapers.idea_mock_scraper import IDEAMockScraper
+from app.services.scrapers.instagram_mock_scraper import InstagramMockScraper
 
 __all__ = [
     "AromaScraper",
@@ -21,4 +22,5 @@ __all__ = [
     "VoliMockScraper",
     "HDLMockScraper",
     "IDEAMockScraper",
+    "InstagramMockScraper",
 ]

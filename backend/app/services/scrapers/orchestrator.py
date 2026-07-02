@@ -50,6 +50,12 @@ class ScraperOrchestrator:
         except Exception as e:
             logger.error(f"Failed to load IDEA scraper: {e}")
 
+        try:
+            from app.services.scrapers.instagram_mock_scraper import InstagramMockScraper
+            self.scrapers["instagram"] = InstagramMockScraper()
+        except Exception as e:
+            logger.error(f"Failed to load Instagram scraper: {e}")
+
         logger.info(f"Registered {len(self.scrapers)} scrapers: {list(self.scrapers.keys())}")
 
     async def run_all(self) -> Dict[str, Any]:

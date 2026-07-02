@@ -226,6 +226,51 @@ async def test_idea_scraper() -> TestScraperResponse:
         )
 
 
+@router.post("/instagram", response_model=TestScraperResponse)
+async def test_instagram_scraper() -> TestScraperResponse:
+    """Test Instagram scraper"""
+    import time
+    start_time = time.time()
+
+    try:
+        from app.services.scrapers.instagram_mock_scraper import InstagramMockScraper
+
+        scraper = InstagramMockScraper()
+        logger.info("Testing Instagram scraper...")
+
+        products = await scraper.scrape()
+        duration = time.time() - start_time
+
+        sample = []
+        for p in products[:3]:
+            sample.append({
+                "name": p.name,
+                "price": p.price,
+                "source": p.source,
+                "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
+            })
+
+        return TestScraperResponse(
+            scraper="Instagram",
+            status="success",
+            products=len(products),
+            sample_products=sample,
+            duration_seconds=duration,
+        )
+
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(f"Instagram test failed: {e}", exc_info=True)
+        return TestScraperResponse(
+            scraper="Instagram",
+            status="failed",
+            products=0,
+            sample_products=[],
+            error=str(e),
+            duration_seconds=duration,
+        )
+
+
 @router.post("/run-all", response_model=OrchestratorResponse)
 async def run_all_scrapers() -> OrchestratorResponse:
     """
