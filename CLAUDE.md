@@ -435,28 +435,34 @@ LanguageSelector ← UKR/RUS/MNE switcher
 
 ### ✅ Phase 1: Frontend Integration (2026-07-02)
 
-**New Endpoints Implemented:**
+**Backend Endpoints (Commit a766bc9):**
 - ✅ `GET /api/v1/products/matrix` — price matrix for landing table
-  - Query params: `lang=ru|uk|en`
-  - Returns: stores, products (rows), updated_at, total_products
-  - Fallback: mock data if DB empty
-  
 - ✅ `GET /api/v1/products/list` — product list with prices
-  - Query params: `limit=50, skip=0`
-  - Returns: products, total_count, updated_at
-  - Fallback: mock data (8 products)
+- Helper functions: `calculate_cheapest()`, `format_product_row()`
+- Schemas: `PriceMatrixResponse`, `ProductListResponse`
 
-**Helper Functions:**
-- `calculate_cheapest()` — find min price & cheapest store
-- `format_product_row()` — convert DB/mock product to API response
+**Frontend Integration (Commit 89565d4):**
+- ✅ **api.ts:** Added `productsAPI` with methods:
+  - `priceMatrix(lang)` → GET /api/v1/products/matrix?lang=ru|uk|en
+  - `list(limit, skip)` → GET /api/v1/products/list
+  
+- ✅ **LandingPageDesignBrief.tsx:** 
+  - Fetch real data from backend on component mount
+  - useEffect hook calls `productsAPI.priceMatrix(lang)` when lang changes
+  - Loading state with "Завантажуємо ціни..." message
+  - Fallback to MOCK_PRODUCTS/MOCK_STORES if API fails
+  - Pass real data to PriceMatrixLanding component
+  
+- ✅ **Data Flow:**
+  1. Component mounts → useEffect triggered
+  2. API call to backend
+  3. Response: {stores, products, updated_at, total_products}
+  4. State updates → PriceMatrixLanding re-renders with real data
+  5. If error → shows loading, keeps mock data as fallback
 
-**Schemas:**
-- `StorePrice`, `ProductRow`, `PriceMatrixResponse`
-- `ProductListItem`, `ProductListResponse`
-
-**Next:**
-- [ ] Connect frontend search bar to backend
-- [ ] Test via Postman/curl
+**Ready for Testing:**
+- ✅ Backend endpoint: http://localhost:8000/api/v1/products/matrix
+- ✅ Frontend component: http://localhost:3000 (with backend running)
   
 - **Phase 2: Mock Data** (Tomorrow)
   - [ ] Seed MongoDB with 8 products (from landing mock data)
