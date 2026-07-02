@@ -69,6 +69,7 @@ MOCK_STORES = [
     {"name": "Voli", "initial": "V", "color": "#2563eb"},
     {"name": "HDL", "initial": "H", "color": "#d97706"},
     {"name": "IDEA", "initial": "I", "color": "#0891b2"},
+    {"name": "Instagram", "initial": "IG", "color": "#e1306c"},  # Added for Phase 3
 ]
 
 MOCK_PRODUCTS = [
@@ -287,6 +288,85 @@ async def get_product_list(
             products=items,
             total_count=len(MOCK_PRODUCTS),
             updated_at=datetime.utcnow().isoformat(),
+        )
+
+
+@router.get("/matrix-live", response_model=PriceMatrixResponse)
+async def get_price_matrix_live() -> PriceMatrixResponse:
+    """
+    Get price comparison matrix using live scraper orchestrator.
+
+    Runs all 5 sources in parallel:
+    - Aroma.me (15 products)
+    - Voli.me (12 products)
+    - HDL.me (14 products)
+    - IDEA.me (11 products)
+    - Instagram (15 products)
+
+    Returns combined products from all sources.
+
+    Example:
+        GET /api/v1/products/matrix-live
+    """
+    try:
+        from app.services.scrapers.orchestrator import ScraperOrchestrator
+
+        logger.info("Running live scraper orchestrator...")
+        orchestrator = ScraperOrchestrator()
+        orch_result = await orchestrator.run_all()
+
+        if orch_result.get("status") == "failed":
+            logger.error(f"Orchestrator failed: {orch_result}")
+            return PriceMatrixResponse(
+                stores=MOCK_STORES,
+                products=[],
+                updated_at=datetime.utcnow().isoformat(),
+                total_products=0,
+            )
+
+        # Collect all products from all scrapers (flat list, no grouping)
+        product_rows = []
+
+        for store_name, store_result in orch_result.get("by_store", {}).items():
+            if store_result.get("status") == "success":
+                for i, sample in enumerate(store_result.get("samples", [])):
+                    # Create product row with price for this store only
+                    prod_id = hashlib.md5(f"{sample['name']}_{store_name}_{i}".encode()).hexdigest()
+
+                    # Find store index
+                    store_idx = next((j for j, s in enumerate(MOCK_STORES) if s["name"].lower() == store_name.lower()), -1)
+
+                    # Build price list: all None except this store
+                    prices = [None] * len(MOCK_STORES)
+                    if store_idx >= 0:
+                        prices[store_idx] = sample["price"]
+
+                    product_rows.append(ProductRow(
+                        id=prod_id,
+                        name=f"{sample['name']} ({sample['source']})",
+                        unit="1x",
+                        prices=prices,
+                        min_price=sample["price"],
+                        cheapest_store=sample["source"],
+                    ))
+
+        logger.info(f"Live scraping: {len(product_rows)} products from {len(orch_result.get('by_store', {}))} sources")
+
+        return PriceMatrixResponse(
+            stores=MOCK_STORES,
+            products=product_rows,
+            updated_at=datetime.utcnow().isoformat(),
+            total_products=len(product_rows),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get live price matrix: {e}", exc_info=True)
+        # Fallback to mock
+        return PriceMatrixResponse(
+            stores=MOCK_STORES,
+            products=[format_product_row(p, MOCK_STORES) for p in MOCK_PRODUCTS],
+            updated_at=datetime.utcnow().isoformat(),
+            total_products=len(MOCK_PRODUCTS),
         )
 
 
