@@ -1,6 +1,7 @@
 """Product API endpoints for frontend integration."""
 
 import logging
+import hashlib
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
@@ -287,3 +288,68 @@ async def get_product_list(
             total_count=len(MOCK_PRODUCTS),
             updated_at=datetime.utcnow().isoformat(),
         )
+
+
+@router.post("/seed")
+async def seed_database(db=Depends(get_db)) -> dict:
+    """
+    Seed database with initial 8 mock products.
+
+    WARNING: Clears existing products and inserts mock data.
+    Use once to initialize database for testing.
+    """
+    try:
+        products_collection = db.products
+        now = datetime.utcnow()
+
+        # Clear existing products
+        cleared = await products_collection.delete_many({})
+        logger.info(f"🗑️  Cleared {cleared.deleted_count} existing products")
+
+        # Prepare documents for insertion
+        products_to_insert = []
+
+        for product in MOCK_PRODUCTS:
+            min_price, cheapest_idx = calculate_cheapest(product["prices"])
+            cheapest_store = STORES[cheapest_idx]["name"] if cheapest_idx >= 0 else None
+
+            doc = {
+                "name": product["name"],
+                "unit": product["unit"],
+                "description": None,
+                "source": "seed",
+                "category": None,
+                "image_url": None,
+                "current_prices": {
+                    STORES[j]["name"]: price
+                    for j, price in enumerate(product["prices"])
+                },
+                "min_price": min_price,
+                "max_price": max(p for p in product["prices"] if p is not None),
+                "cheapest_store": cheapest_store,
+                "dedup_hash": hashlib.md5(
+                    f"{product['name']}_seed".lower().encode()
+                ).hexdigest(),
+                "created_at": now,
+                "updated_at": now,
+            }
+            products_to_insert.append(doc)
+
+        # Insert all products
+        result = await products_collection.insert_many(products_to_insert)
+        logger.info(f"✅ Inserted {len(result.inserted_ids)} products")
+
+        # Verify count
+        count = await products_collection.count_documents({})
+
+        return {
+            "success": True,
+            "message": "Database seeded with 8 mock products",
+            "products_cleared": cleared.deleted_count,
+            "products_inserted": len(result.inserted_ids),
+            "total_in_db": count,
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Seeding failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Seeding failed: {str(e)}")
