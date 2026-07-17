@@ -4,7 +4,27 @@
 
 ---
 
-## 🎯 Start Here
+## ⚠️ Read This First: Which Docs Are Current
+
+This project has two generations of documentation:
+
+- **Current / actively maintained** (updated after every task, Phase 4+,
+  2026-07-13 onward): **[PROJECT_MAP.md](PROJECT_MAP.md)** (status +
+  bugfixes), **[PHASE_4_PLAN.md](PHASE_4_PLAN.md)** (accounts, shopping
+  lists, admin panel, localization — full detail), **[CLAUDE.md](CLAUDE.md)**
+  (numbered technical changelog). **Start here for anything about how the app
+  works today.**
+- **Historical / point-in-time snapshots** (Phase 0-3, 2026-06-16 →
+  2026-07-02, not updated since): everything below this section, plus
+  `PHASE_1_COMPLETION.md`, `PHASE_2_COMPLETION.md`, `PHASE_3_PLAN.md`,
+  `PHASE_3_PROGRESS.md`. These describe the original mock-scraper design
+  (3 languages, Docker on ports 3003/8001) that Phase 4 superseded — useful
+  as design history, **not** as a guide to the current app. See
+  `PROJECT_STATUS.md`'s own banner for specifics on what changed.
+
+---
+
+## 🎯 Start Here (original Phase 0-3 docs — see warning above)
 
 ### First Time? Start with These:
 1. **[README.md](README.md)** ⭐ PROJECT OVERVIEW
@@ -366,7 +386,7 @@ Start with [README.md](README.md) and follow the documentation path for your use
 
 ---
 
-**Last Updated:** 2026-06-16  
-**Total Documentation:** 4,100+ lines  
-**Coverage:** 100% of project  
-**Status:** ✅ Complete
+**Last Updated:** 2026-07-17 (this index) — most linked docs below are still 2026-06-16
+**Total Documentation:** 4,100+ lines (Phase 0-3) + PROJECT_MAP.md/PHASE_4_PLAN.md/CLAUDE.md (Phase 4+, current)
+**Coverage:** Phase 0-3 complete; Phase 4.0-4.6 documented separately, see warning at top
+**Status:** 🟡 Phase 4 docs are current; this file's linked docs are historical

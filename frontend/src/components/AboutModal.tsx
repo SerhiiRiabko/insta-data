@@ -1,13 +1,21 @@
 'use client';
 
+import type { Lang } from '@/lib/productMatrix';
+
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
-  lang: 'ru' | 'uk' | 'en';
+  lang: Lang;
 }
 
-const translations = {
-  ru: {
+type AboutText = {
+  title: string; mission: string; missionText: string; features: string;
+  feature1: string; feature2: string; feature3: string; feature4: string;
+  techStack: string; frontend: string; backend: string; scrapers: string;
+};
+
+const translations: Record<Lang, AboutText> = {
+  rus: {
     title: 'О проекте',
     mission: 'Миссия',
     missionText:
@@ -15,14 +23,14 @@ const translations = {
     features: 'Особенности',
     feature1: 'Сравнение цен в реальном времени',
     feature2: '4 магазина: Aroma, Voli, HDL, IDEA',
-    feature3: '3 языка: Украинский, Русский, Черногорский',
+    feature3: '6 языков: Украинский, Русский, Черногорский, Сербский, Боснийский, Английский',
     feature4: 'Список покупок с расчетом оптимального магазина',
     techStack: 'Технологический стек',
     frontend: 'Frontend: Next.js 15 + React 19 + Tailwind 4',
     backend: 'Backend: FastAPI + MongoDB + PostgreSQL',
     scrapers: 'Парсинг: Playwright + BeautifulSoup4',
   },
-  uk: {
+  ukr: {
     title: 'Про проект',
     mission: 'Мета',
     missionText:
@@ -30,14 +38,14 @@ const translations = {
     features: 'Особливості',
     feature1: 'Порівняння цін у реальному часі',
     feature2: '4 магазини: Aroma, Voli, HDL, IDEA',
-    feature3: '3 мови: Українська, Російська, Чорногорська',
+    feature3: '6 мов: Українська, Російська, Чорногорська, Сербська, Боснійська, Англійська',
     feature4: 'Список покупок з розрахунком оптимального магазину',
     techStack: 'Технічний стек',
     frontend: 'Frontend: Next.js 15 + React 19 + Tailwind 4',
     backend: 'Backend: FastAPI + MongoDB + PostgreSQL',
     scrapers: 'Парсинг: Playwright + BeautifulSoup4',
   },
-  en: {
+  eng: {
     title: 'About',
     mission: 'Mission',
     missionText:
@@ -45,12 +53,57 @@ const translations = {
     features: 'Features',
     feature1: 'Real-time price comparison',
     feature2: '4 stores: Aroma, Voli, HDL, IDEA',
-    feature3: '3 languages: Ukrainian, Russian, Montenegrin',
+    feature3: '6 languages: Ukrainian, Russian, Montenegrin, Serbian, Bosnian, English',
     feature4: 'Shopping list with optimal store calculation',
     techStack: 'Technology Stack',
     frontend: 'Frontend: Next.js 15 + React 19 + Tailwind 4',
     backend: 'Backend: FastAPI + MongoDB + PostgreSQL',
     scrapers: 'Scraping: Playwright + BeautifulSoup4',
+  },
+  mne: {
+    title: 'O projektu',
+    mission: 'Misija',
+    missionText:
+      'Pomoći stanovnicima Crne Gore da uštede novac poređenjem cijena proizvoda u 4 najveće prodavnice u zemlji.',
+    features: 'Karakteristike',
+    feature1: 'Poređenje cijena u realnom vremenu',
+    feature2: '4 prodavnice: Aroma, Voli, HDL, IDEA',
+    feature3: '6 jezika: ukrajinski, ruski, crnogorski, srpski, bosanski, engleski',
+    feature4: 'Lista za kupovinu sa proračunom najpovoljnije prodavnice',
+    techStack: 'Tehnološki stek',
+    frontend: 'Frontend: Next.js 15 + React 19 + Tailwind 4',
+    backend: 'Backend: FastAPI + MongoDB + PostgreSQL',
+    scrapers: 'Prikupljanje podataka: Playwright + BeautifulSoup4',
+  },
+  srb: {
+    title: 'O projektu',
+    mission: 'Misija',
+    missionText:
+      'Pomoći stanovnicima Crne Gore da uštede novac poređenjem cena proizvoda u 4 najveće prodavnice u zemlji.',
+    features: 'Karakteristike',
+    feature1: 'Poređenje cena u realnom vremenu',
+    feature2: '4 prodavnice: Aroma, Voli, HDL, IDEA',
+    feature3: '6 jezika: ukrajinski, ruski, crnogorski, srpski, bosanski, engleski',
+    feature4: 'Lista za kupovinu sa proračunom najpovoljnije prodavnice',
+    techStack: 'Tehnološki stek',
+    frontend: 'Frontend: Next.js 15 + React 19 + Tailwind 4',
+    backend: 'Backend: FastAPI + MongoDB + PostgreSQL',
+    scrapers: 'Prikupljanje podataka: Playwright + BeautifulSoup4',
+  },
+  bos: {
+    title: 'O projektu',
+    mission: 'Misija',
+    missionText:
+      'Pomoći stanovnicima Crne Gore da uštede novac poređenjem cijena proizvoda u 4 najveće prodavnice u zemlji.',
+    features: 'Karakteristike',
+    feature1: 'Poređenje cijena u realnom vremenu',
+    feature2: '4 prodavnice: Aroma, Voli, HDL, IDEA',
+    feature3: '6 jezika: ukrajinski, ruski, crnogorski, srpski, bosanski, engleski',
+    feature4: 'Lista za kupovinu sa proračunom najpovoljnije prodavnice',
+    techStack: 'Tehnološki stek',
+    frontend: 'Frontend: Next.js 15 + React 19 + Tailwind 4',
+    backend: 'Backend: FastAPI + MongoDB + PostgreSQL',
+    scrapers: 'Prikupljanje podataka: Playwright + BeautifulSoup4',
   },
 };
 
@@ -61,7 +114,7 @@ export function AboutModal({ isOpen, onClose, lang }: AboutModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-[42rem] w-full max-h-[80vh] overflow-y-auto">
         {/* Header */}
         <div className="border-b border-gray-200 p-6 flex items-center justify-between sticky top-0 bg-white">
           <h2 className="text-2xl font-bold text-gray-900">{t.title}</h2>

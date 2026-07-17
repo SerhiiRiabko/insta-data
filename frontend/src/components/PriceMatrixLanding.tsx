@@ -23,87 +23,48 @@
 
 'use client';
 
-import { useMemo } from 'react';
-
-interface Store {
-  name: string;
-  initial: string;
-  color: string;
-}
-
-interface Product {
-  name: string;
-  unit: string;
-  prices: (number | null)[]; // Per store (null = не доступно)
-}
+import { Fragment, useMemo } from 'react';
+import {
+  type MatrixProduct as Product,
+  type MatrixStore as Store,
+  type Lang,
+  translations,
+  formatPrice,
+  groupByCategory,
+  withCheapest,
+} from '@/lib/productMatrix';
 
 interface PriceMatrixProps {
   products: Product[];
   stores: Store[];
-  lang: 'ru' | 'uk' | 'en';
+  lang: Lang;
   accent?: string;
+  onRefreshPrices?: () => void;
+  refreshing?: boolean;
 }
-
-const translations = {
-  ru: {
-    product: 'Товар',
-    cheapest: 'Дешевле всего',
-    updated: 'Обновлено сегодня',
-  },
-  uk: {
-    product: 'Товар',
-    cheapest: 'Найдешевше',
-    updated: 'Оновлено сьогодні',
-  },
-  en: {
-    product: 'Product',
-    cheapest: 'Cheapest',
-    updated: 'Updated today',
-  },
-};
-
-const formatPrice = (price: number | null, lang: 'ru' | 'uk' | 'en'): string => {
-  if (price === null) return '—';
-  if (lang === 'en') {
-    return `€${price.toFixed(2)}`;
-  }
-  return `€ ${price.toFixed(2).replace('.', ',')}`;
-};
 
 export function PriceMatrixLanding({
   products,
   stores,
-  lang = 'ru',
+  lang = 'ukr',
   accent = '#0b6e4f',
+  onRefreshPrices,
+  refreshing = false,
 }: PriceMatrixProps) {
   const t = translations[lang];
 
-  const productsWithCheapest = useMemo(
-    () =>
-      products.map((product) => {
-        const validPrices = product.prices.map((p, i) => ({ price: p, index: i })).filter(p => p.price !== null);
-        if (validPrices.length === 0) {
-          return {
-            ...product,
-            minPrice: null,
-            cheapestStoreIndex: -1,
-            cheapestStoreName: '—',
-          };
-        }
-        const minPrice = Math.min(...validPrices.map(p => p.price as number));
-        const cheapestStoreIndex = validPrices.find(p => p.price === minPrice)?.index || -1;
-        return {
-          ...product,
-          minPrice,
-          cheapestStoreIndex,
-          cheapestStoreName: stores[cheapestStoreIndex]?.name || '—',
-        };
-      }),
-    [products, stores]
-  );
+  const productsWithCheapest = useMemo(() => withCheapest(products, stores), [products, stores]);
+
+  const hasCategories = productsWithCheapest.some((p) => !!p.category);
+
+  const groups = hasCategories
+    ? groupByCategory(productsWithCheapest, t.other)
+    : [{ name: '', rows: productsWithCheapest }];
+
+  const colSpan = stores.length + 2; // product column + cheapest column
 
   return (
-    <div className="w-full bg-white backdrop-blur-md rounded-3xl border border-gray-300 shadow-2xl overflow-hidden" style={{ boxShadow: '0 28px 64px -30px rgba(6,78,59,0.4)' }}>
+    <div className="hidden md:block w-full bg-white backdrop-blur-md rounded-3xl border border-gray-300 shadow-2xl overflow-hidden" style={{ boxShadow: '0 28px 64px -30px rgba(6,78,59,0.4)' }}>
       {/* Header Bar — per design handoff */}
       <div
         style={{
@@ -117,7 +78,7 @@ export function PriceMatrixLanding({
           boxSizing: 'border-box',
         }}
       >
-        {/* Left: accent dot + title */}
+        {/* Left: accent dot + title + refresh button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span
             style={{
@@ -130,6 +91,36 @@ export function PriceMatrixLanding({
           <span style={{ fontSize: '17px', fontWeight: '700', color: '#0f3d2e' }}>
             {t.product}
           </span>
+          {onRefreshPrices && (
+            <button
+              onClick={onRefreshPrices}
+              disabled={refreshing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '999px',
+                border: `1px solid ${refreshing ? '#d9e7df' : accent}`,
+                backgroundColor: refreshing ? '#eafaf1' : 'white',
+                color: accent,
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: refreshing ? 'default' : 'pointer',
+                transition: 'background-color 120ms',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  animation: refreshing ? 'monteShopSpin 0.8s linear infinite' : 'none',
+                }}
+              >
+                ⟳
+              </span>
+              {refreshing ? t.refreshing : t.refresh}
+            </button>
+          )}
         </div>
         {/* Right: updated text */}
         <span
@@ -144,10 +135,10 @@ export function PriceMatrixLanding({
         </span>
       </div>
 
-      {/* Table */}
-      <div style={{ overflow: 'hidden', width: '100%' }}>
+      {/* Table — scrolls internally, store-header row stays pinned via sticky thead */}
+      <div style={{ overflowY: 'auto', overflowX: 'hidden', width: '100%', maxHeight: '70vh' }}>
         <table className="w-full" style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-          <thead>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
             <tr style={{ backgroundColor: '#f6faf8', borderBottom: '2px solid #d9e7df' }}>
               {/* Product Column */}
               <th
@@ -233,7 +224,30 @@ export function PriceMatrixLanding({
           </thead>
 
           <tbody>
-            {productsWithCheapest.map((product, rowIdx) => (
+            {groups.map((group, groupIdx) => (
+              <Fragment key={group.name || `group-${groupIdx}`}>
+                {group.name && (
+                  <tr>
+                    <td
+                      colSpan={colSpan}
+                      style={{
+                        textAlign: 'left',
+                        padding: '10px 16px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        color: '#33524a',
+                        backgroundColor: '#eef4f1',
+                        borderTop: '1px solid #d9e7df',
+                        borderBottom: '1px solid #d9e7df',
+                      }}
+                    >
+                      {group.name} · {group.rows.length}
+                    </td>
+                  </tr>
+                )}
+                {group.rows.map((product, rowIdx) => (
               <tr key={rowIdx} style={{ borderBottom: '1px solid #eef4f1' }}>
                 {/* Product Name Cell */}
                 <td
@@ -249,17 +263,38 @@ export function PriceMatrixLanding({
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f3d2e' }}>
-                    {product.name}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#94aea3', marginTop: '4px', fontFamily: 'monospace' }}>
-                    {product.unit}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {product.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={product.imageUrl}
+                        alt=""
+                        width={28}
+                        height={28}
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '6px',
+                          objectFit: 'cover',
+                          border: '1px solid #eef4f1',
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : null}
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f3d2e' }}>
+                        {product.name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94aea3', marginTop: '4px', fontFamily: 'monospace' }}>
+                        {product.unit}
+                      </div>
+                    </div>
                   </div>
                 </td>
 
                 {/* Price Cells */}
                 {product.prices.map((price, colIdx) => {
-                  const isCheapest = colIdx === product.cheapestStoreIndex && price !== null;
+                  const isCheapest = colIdx === product.cheapestIndex && price !== null;
                   const isUnavailable = price === null;
 
                   return (
@@ -314,6 +349,8 @@ export function PriceMatrixLanding({
                   )}
                 </td>
               </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>

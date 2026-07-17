@@ -6,6 +6,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
+import { BCP47_TAG } from '@/lib/productMatrix';
 import '@/app/globals.css';
 
 export const metadata: Metadata = {
@@ -30,7 +31,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang={lang}>
+    <html lang={BCP47_TAG[lang as keyof typeof BCP47_TAG] ?? lang}>
       <body>{children}</body>
     </html>
   );

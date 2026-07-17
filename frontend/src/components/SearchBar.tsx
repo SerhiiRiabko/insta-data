@@ -6,7 +6,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 export function SearchBar() {
@@ -54,7 +54,7 @@ export function SearchBar() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto">
+    <form onSubmit={handleSubmit} className="w-full max-w-[42rem] mx-auto">
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <input

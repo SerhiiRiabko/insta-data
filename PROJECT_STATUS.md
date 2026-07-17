@@ -1,57 +1,67 @@
 # 📊 Insta-Data Project Status
 
-**Last Updated:** 2026-06-16  
-**Status:** 🟢 READY FOR DEPLOYMENT  
+**Last Updated:** 2026-07-17
+**Status:** 🟡 ACTIVE DEVELOPMENT — Phase 4.0-4.6 done, not yet deployed to production
 **Version:** 1.0.0
+
+> ⚠️ **This file is a point-in-time snapshot, updated occasionally.** For the
+> current, actively-maintained project status, read **[PROJECT_MAP.md](PROJECT_MAP.md)**
+> first — it's updated after every task/phase. Phase 4 detail (auth, shopping
+> lists, admin panel, localization) lives in **[PHASE_4_PLAN.md](PHASE_4_PLAN.md)**.
+> Day-to-day changelog with technical detail is in **[CLAUDE.md](CLAUDE.md)**.
 
 ---
 
 ## 🏆 Completion Summary
 
-### Phase 0: Foundation ✅ COMPLETE
-- [x] Docker Compose setup (6 services)
-- [x] Project structure
-- [x] Environment configuration
-- [x] Database schemas
-- **Artifacts:** docker-compose.yml, .env.example, Dockerfile*
+### Phase 0-3: Foundation, scrapers POC, frontend integration ✅ COMPLETE (2026-06-16 → 2026-07-02)
+Docker Compose scaffold, Instagram OCR-based scraper POC, mock store scrapers
+(Aroma/Voli/HDL/IDEA), first working price-matrix frontend. Superseded by
+Phase 4 below — the mock scrapers described in the original Phase 1-3 docs
+(`PHASE_1_COMPLETION.md`, `PHASE_2_COMPLETION.md`, `PHASE_3_PLAN.md`) were
+removed once the real cijene.me-based scraper (Phase 4) replaced them.
 
-### Phase 1: Instagram Parser POC ✅ COMPLETE
-- [x] Data models (Pydantic + MongoDB schemas)
-- [x] Instagram session manager (instagrapi)
-- [x] Post scraper (48-hour lookback)
-- [x] OCR + price extraction (Tesseract)
-- [x] MongoDB product storage (deduplication)
-- [x] API endpoints (/instagram/scrape, /instagram/test-connection)
-- [x] Unit tests (40+ test cases)
-- **Artifacts:** 7 service files, 3 test files
+### Phase 4.0-4.6: Accounts, shopping lists, admin panel, localization ✅ COMPLETE (2026-07-13 → 2026-07-17)
+Full detail in [PHASE_4_PLAN.md](PHASE_4_PLAN.md); summary:
+- **4.0** — quick UI fixes, 2 new locale stubs (srb/bos)
+- **4.1** — guest shopping lists (no login), shareable link, 30-day TTL
+- **4.2** — accounts (email+password AND magic-link), saved/multiple lists, tier limits
+- **4.3** — stores admin (CRUD, replaces hardcoded mock store list)
+- **4.4** — admin panel (auth-gated, tiers CMS, user management)
+- **4.5** — scraper agents in admin (manage/run the real cijene.me scraper from the UI)
+- **4.6** — localization unification (6 locales: ukr/rus/mne/srb/bos/eng, one
+  `Lang` type, one URL-locale source of truth), product name translation
+  (`name_i18n` + free dictionary translator, see 2026-07-17 follow-up below),
+  language-aware search
+- **Real scraping replaced mocks**: the current live data source is
+  `cijene_scraper.py` (cijene.me aggregator, covers Aroma/Voli/HDL/IDEA in one
+  scrape) + an Instagram mock, orchestrated by
+  `app/services/scrapers/orchestrator.py`. The Phase 1-3 mock scrapers
+  (`aroma_mock_scraper.py`, `hdl_mock_scraper.py`, `idea_mock_scraper.py`,
+  `voli_mock_scraper.py`) and the Instagram OCR pipeline (`instagrapi`,
+  Tesseract) referenced throughout this doc's older sections below are no
+  longer part of the live pipeline.
 
-### Phase 2: Web Scrapers ✅ COMPLETE
-- [x] Base StoreScraper class (Playwright + BeautifulSoup)
-- [x] 4 Store implementations (Aroma, Voli, HDL, IDEA)
-- [x] PostgreSQL schema + Alembic migrations
-- [x] ScraperOrchestrator (APScheduler, parallel execution)
-- [x] Search service (full-text search, caching)
-- [x] API endpoints (/scrapers/*, /search/*)
-- [x] Unit tests (25+ test cases)
-- **Artifacts:** 6 service files, 2 test files, Alembic setup
+### 2026-07-17 follow-up: real product-name translations + 2 search bugfixes
+- `grocery_dictionary.py` — free, deterministic word-level translator (no API
+  key needed), backfilled `name_i18n` for 281/287 (98%) real products.
+- Fixed two bugs that silently broke `/search/products` for any query (missing
+  MongoDB text index; a response model requiring a field that's always `None`
+  on real data).
+- Fixed the landing-page hero search bar (was pure unwired UI) and the
+  "create shopping list" search (was re-running a full ~10-15s live scrape on
+  every modal open instead of filtering already-loaded data).
 
-### Phase 3: Real Scrapers + Frontend Integration ✅ COMPLETE
-- [x] BaseScraper architecture (Playwright + BeautifulSoup dual approach)
-- [x] 4 Store Mock Scrapers (Aroma, Voli, HDL, IDEA) — 52 products
-- [x] Instagram Mock Scraper — 15 social price posts
-- [x] ScraperOrchestrator (parallel async execution, 0.005s)
-- [x] `/api/v1/products/matrix-live` endpoint (all 67 products)
-- [x] Frontend integration with live data fetching + fallback
-- [x] LandingPageDesignBrief component (Variant A)
-- [x] Price matrix display with 5 sources
-- **Artifacts:** 5 scraper files, orchestrator, API endpoint, frontend component
+Full detail: `PROJECT_MAP.md` → "Bugfix (2026-07-17, 2 частини)" and
+`CLAUDE.md` → changelog entries 21-22.
 
-### Phase 4: Real Scrapers + MongoDB + Scheduling 🔄 NEXT
-- [ ] Replace mock scrapers with real Playwright/BeautifulSoup implementations
-- [ ] MongoDB integration for persistent product storage
-- [ ] APScheduler for 24h automatic scraping
-- [ ] Production deployment (supervisor config)
-- [ ] Performance optimization & caching
+### Not yet done
+- [ ] Production deployment (this app has never been deployed — see the
+  ⚠️ note under Deployment below about `DEPLOYMENT.md`'s target server)
+- [ ] Automated scheduled scraping is in place (weekly Monday 07:00 Kyiv via
+  APScheduler) but not yet verified running unattended in production
+- [ ] Category header labels (Овочі/Молочка/...) are hardcoded Ukrainian
+  regardless of UI locale — not yet localized (separate, smaller known gap)
 
 ---
 
@@ -59,17 +69,12 @@
 
 | Metric | Count |
 |--------|-------|
-| **Backend Files** | 25+ |
-| **Frontend Files** | 20+ |
-| **Database Schemas** | 5 (MongoDB + PostgreSQL) |
-| **API Endpoints** | 20+ |
-| **React Components** | 6 |
-| **Service Classes** | 12 |
-| **Test Cases** | 65+ |
-| **Supported Languages** | 3 |
-| **Scrapers Implemented** | 5 (Instagram + 4 stores) - Mock versions ready for replacement |
-| **Total Products Available** | 67 (52 stores + 15 Instagram) |
-| **Execution Speed** | 0.005s parallel orchestration |
+| **API Endpoints** | 40+ (products, search, auth, lists, admin, stores, scraper-agents) |
+| **React Components** | 15+ |
+| **Supported Languages** | 6 (ukr/rus/mne/srb/bos/eng) |
+| **Live Data Source** | cijene.me (real scrape, aggregates Aroma/Voli/HDL/IDEA) + Instagram mock |
+| **Total Products (current DB)** | 287 real scraped products |
+| **Products with translated name (`name_i18n`)** | 281/287 (98%) — see 2026-07-17 follow-up |
 
 ---
 
@@ -77,49 +82,51 @@
 
 ### Backend Stack
 - **Framework:** FastAPI (async)
-- **Databases:** MongoDB (primary), PostgreSQL (history), Redis (cache)
-- **Authentication:** Telegram session via instagrapi
-- **Scraping:** Playwright (JS), BeautifulSoup (HTML), instagrapi (Instagram)
-- **OCR:** Tesseract (price extraction)
-- **Scheduling:** APScheduler (daily 06:00 UTC)
-- **Testing:** pytest + AsyncIO
+- **Database:** MongoDB (primary — native Windows service for local dev, not
+  Docker; PostgreSQL/Redis exist in `docker-compose.yml` but aren't required
+  for the current feature set)
+- **Auth:** Session cookie (HttpOnly JWT), email+password AND magic-link
+- **Scraping:** `cijene_scraper.py` (real, aggregator site) + Instagram mock,
+  via `app/services/scrapers/orchestrator.py`
+- **Translation:** `grocery_dictionary.py` (free, deterministic) with an
+  optional Groq AI fallback (`translation_service.py`)
+- **Scheduling:** APScheduler (weekly Monday 07:00 Kyiv)
 
 ### Frontend Stack
 - **Framework:** Next.js 15 + React 19
-- **Styling:** Tailwind CSS 4 + Framer Motion
-- **i18n:** next-intl (3 languages)
+- **Styling:** Tailwind CSS 4 (v3-style config via `@config` compat layer —
+  see the documented `max-w-*`/spacing-scale collision gotcha in
+  `PROJECT_MAP.md`)
+- **i18n:** next-intl, 6 locales, URL locale segment is the single source of
+  truth for the `Lang` type (`lib/productMatrix.ts`)
 - **HTTP:** Axios
-- **Components:** 6 interactive React components
 
-### Infrastructure
-- **Containerization:** Docker + Docker Compose
-- **Orchestration:** 6 services (backend, frontend, mongo, postgres, redis, nginx)
-- **Ports:** 
-  - Frontend: 3003 (mapped from container 3000)
-  - Backend: 8001 (mapped from container 8000)
-  - MongoDB: 27017
-  - PostgreSQL: 5432
-  - Redis: 6379
+### Local Development (current, not Docker)
+- **Backend:** `venv/Scripts/python.exe -m uvicorn app.main:app --port 8001`
+- **Frontend:** `npm run dev -- -p 3001`
+- **MongoDB:** native Windows service on `localhost:27017` (see `.env` comment)
+- Ports **3001**/**8001** are the real, currently-used ports — not 3003/8001
+  as described in the Docker-based sections further down this document.
 
 ---
 
-## 🚀 Deployment Ready
+## 🚀 Deployment Status
 
-### ✅ What's Ready
-- [x] Complete backend with all scrapers
-- [x] Frontend with i18n + responsive design
-- [x] Docker containers for all services
-- [x] Database schemas + migrations
-- [x] API documentation (Swagger at /docs)
-- [x] 65+ unit tests
-- [x] Environment configuration
-- [x] .env templates for both frontend & backend
+**Not yet deployed to production.** This has been local-dev-only throughout
+Phase 4. `DEPLOYMENT.md` describes a planned Hetzner VPS setup —
+⚠️ **verify its target server before using it**: it currently points at
+`root@138.199.204.107`, which the top-level workspace `CLAUDE.md` (one level
+up, for the unrelated `hrd-minion` project) marks **"ONLY PRODUCTION"** for a
+different bot. This looks like it may be a copy-paste artifact rather than an
+intentional shared-infrastructure decision — confirm before deploying
+anything there.
 
 ### ⚠️ Before Production
-- [ ] Update `.env` with real API keys
-  - Instagram password
-  - OpenAI/Groq API key (if using AI)
-  - JWT secret
+- [ ] Resolve the `DEPLOYMENT.md` target-server question above
+- [ ] Update `.env` with real production secrets (JWT secret, Resend API key
+  already configured/shared per an earlier explicit user decision — see
+  `CLAUDE.md` for which keys are safe to reuse across projects and which
+  aren't)
 - [ ] Configure domain/SSL
 - [ ] Set up database backups
 - [ ] Configure monitoring + logging
@@ -318,57 +325,53 @@ Return to Frontend → PriceMatrix renders ProductCards
 
 ---
 
-## 🎯 Next Steps (Phase 4 Continued)
+## 🎯 Next Steps
 
-1. **Local Development Setup**
-   - Create `LOCAL_SETUP.md`
-   - Instructions for running locally
-   - Troubleshooting guide
+`LOCAL_SETUP.md` and `DEPLOYMENT.md` already exist (items 1-2 of the original
+list here are done) — see the ⚠️ deployment-target note above before using
+`DEPLOYMENT.md`. Remaining open items:
 
-2. **Production Deployment**
-   - Create `DEPLOYMENT.md`
-   - Hetzner VPS setup
-   - SSL/HTTPS configuration
-   - Database backups
-
-3. **Monitoring & Logging**
+1. **Production Deployment** — resolve the target-server question, then
+   actually deploy (never done yet).
+2. **Monitoring & Logging**
    - Add health check endpoints
    - Configure logging (structlog + JSON format)
    - Add metrics collection
-
-4. **CI/CD Pipeline** (Optional)
+3. **CI/CD Pipeline** (Optional)
    - GitHub Actions workflow
    - Automated testing
-   - Docker image builds
-   - Auto-deploy to production
+4. **Category header localization** — `Овочі`/`Молочка`/etc. are hardcoded
+   Ukrainian regardless of UI locale (`category_map.py` on the backend);
+   noted in `PROJECT_MAP.md`, not yet scheduled.
 
 ---
 
 ## 🚀 Quick Start (Local Development)
 
-### Option A: Local Python + Node (Recommended for Development)
+**Current, actually-used setup** (native, not Docker — see `LOCAL_SETUP.md`
+for the full guide):
 
 ```bash
 # 1. Backend (Terminal 1)
 cd backend
-python -m venv venv
-venv\Scripts\activate  # Windows PowerShell
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8001
 
 # 2. Frontend (Terminal 2)
 cd frontend
-npm install
-NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+npm run dev -- -p 3001
 
 # 3. Access
-# Frontend: http://localhost:3000/uk (Ukrainian)
-# Backend: http://localhost:8000
-# API Docs: http://localhost:8000/docs
-# Live Products: http://localhost:8000/api/v1/products/matrix-live
+# Frontend: http://localhost:3001/ukr  (or /rus /mne /srb /bos /eng)
+# Backend:  http://localhost:8001
+# API Docs: http://localhost:8001/docs
+# MongoDB:  native Windows service, localhost:27017 (not Docker)
 ```
 
-### Option B: Docker Compose (Full Stack)
+### Docker Compose (original design, not the current dev workflow)
+
+The sections below (file structure, data flow, Docker services) describe the
+original Phase 0-3 design and may not exactly match today's file layout — see
+`PROJECT_MAP.md` for what's actually in the codebase now.
 
 ```bash
 # 1. Navigate to project
@@ -410,8 +413,8 @@ MIT License - See LICENSE file
 
 ---
 
-**Project Status: ✅ READY FOR DEPLOYMENT**
+**Project Status: 🟡 ACTIVE DEVELOPMENT — feature-complete for Phase 4.0-4.6, never deployed to production**
 
-All components implemented | Documentation complete | Tests passing | Docker ready
+Real cijene.me scraping | 6 locales | Accounts + shopping lists + admin panel | Not yet deployed
 
-Next: Deploy to production or continue with optional CI/CD setup.
+Next: resolve the `DEPLOYMENT.md` target-server question, then actually deploy. See [PROJECT_MAP.md](PROJECT_MAP.md) for current status.

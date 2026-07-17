@@ -1,9 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { storesAPI } from '@/lib/api';
+import type { Lang } from '@/lib/productMatrix';
+
 interface StoresModalProps {
   isOpen: boolean;
   onClose: () => void;
-  lang: 'ru' | 'uk' | 'en';
+  lang: Lang;
 }
 
 interface Store {
@@ -12,61 +16,82 @@ interface Store {
   color: string;
 }
 
-const STORES: Store[] = [
-  {
-    name: 'Aroma',
-    url: 'https://aromamarketi.me/uvijek-svjeze/',
-    color: '#e11d48',
-  },
-  {
-    name: 'Voli',
-    url: 'https://voli.me/',
-    color: '#2563eb',
-  },
-  {
-    name: 'HDL',
-    url: 'https://www.digitalniletak.me/hd-lakovic',
-    color: '#d97706',
-  },
-  {
-    name: 'IDEA',
-    url: 'https://www.idea.co.me/',
-    color: '#0891b2',
-  },
+// Fallback while /api/v1/stores loads (or if it's unreachable) - the same 4
+// stores that used to be the only option, before the `stores` collection
+// (Phase 4.3) became the editable source of truth.
+const FALLBACK_STORES: Store[] = [
+  { name: 'Aroma', url: 'https://aromamarketi.me/uvijek-svjeze/', color: '#e11d48' },
+  { name: 'Voli', url: 'https://voli.me/', color: '#2563eb' },
+  { name: 'HDL', url: 'https://www.digitalniletak.me/hd-lakovic', color: '#d97706' },
+  { name: 'IDEA', url: 'https://www.idea.co.me/', color: '#0891b2' },
 ];
 
-const translations = {
-  ru: {
+const translations: Record<Lang, {
+  title: string; description: string; store: string; website: string; openWebsite: string;
+}> = {
+  rus: {
     title: 'Магазины',
     description: 'Магазины, где собираются цены товаров',
     store: 'Магазин',
     website: 'Веб-сайт',
     openWebsite: 'Открыть сайт',
   },
-  uk: {
+  ukr: {
     title: 'Магазини',
     description: 'Магазини, звідки збираються ціни товарів',
     store: 'Магазин',
     website: 'Веб-сайт',
     openWebsite: 'Відкрити сайт',
   },
-  en: {
+  eng: {
     title: 'Stores',
     description: 'Stores from which product prices are collected',
     store: 'Store',
     website: 'Website',
     openWebsite: 'Open website',
   },
+  mne: {
+    title: 'Prodavnice',
+    description: 'Prodavnice iz kojih se prikupljaju cijene proizvoda',
+    store: 'Prodavnica',
+    website: 'Sajt',
+    openWebsite: 'Otvori sajt',
+  },
+  srb: {
+    title: 'Prodavnice',
+    description: 'Prodavnice iz kojih se prikupljaju cene proizvoda',
+    store: 'Prodavnica',
+    website: 'Sajt',
+    openWebsite: 'Otvori sajt',
+  },
+  bos: {
+    title: 'Prodavnice',
+    description: 'Prodavnice iz kojih se prikupljaju cijene proizvoda',
+    store: 'Prodavnica',
+    website: 'Sajt',
+    openWebsite: 'Otvori sajt',
+  },
 };
 
 export function StoresModal({ isOpen, onClose, lang }: StoresModalProps) {
   const t = translations[lang];
+  const [stores, setStores] = useState<Store[]>(FALLBACK_STORES);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    storesAPI
+      .list()
+      .then((res) => {
+        if (res.data.stores?.length > 0) setStores(res.data.stores);
+      })
+      .catch((err) => console.warn('Failed to load stores, using fallback:', err));
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-[48rem] w-full max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="border-b border-gray-200 p-6 flex items-center justify-between">
           <div>
@@ -82,9 +107,10 @@ export function StoresModal({ isOpen, onClose, lang }: StoresModalProps) {
           </button>
         </div>
 
-        {/* Stores Table */}
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full border-collapse">
+        {/* Stores Table — scrolls horizontally on narrow screens instead of
+            squeezing the URL column down to one character per line. */}
+        <div className="overflow-auto flex-1">
+          <table className="w-full min-w-[520px] border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b-2 border-gray-200">
                 <th className="text-left px-6 py-4 font-semibold text-gray-900">{t.store}</th>
@@ -93,7 +119,7 @@ export function StoresModal({ isOpen, onClose, lang }: StoresModalProps) {
               </tr>
             </thead>
             <tbody>
-              {STORES.map((store, idx) => (
+              {stores.map((store, idx) => (
                 <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">

@@ -1,0 +1,59 @@
+{
+  "app": {
+    "name": "Monte-Shop-Price",
+    "description": "Compare prices across all stores in Montenegro in real time"
+  },
+  "header": {
+    "search": "Product search",
+    "language": "Language",
+    "menu": "Menu"
+  },
+  "search": {
+    "placeholder": "Search products by name...",
+    "button": "Search",
+    "results": "Search results",
+    "noResults": "No products found"
+  },
+  "tabs": {
+    "instagram": "Instagram",
+    "official": "Official sites",
+    "all": "All"
+  },
+  "stores": {
+    "aroma": "Aroma",
+    "voli": "Voli",
+    "hdl": "HDL",
+    "idea": "IDEA"
+  },
+  "price": {
+    "min": "Minimum price",
+    "max": "Maximum price",
+    "currency": "EUR",
+    "cheapest": "Cheapest at",
+    "priceHistory": "Price history"
+  },
+  "products": {
+    "name": "Name",
+    "price": "Price",
+    "store": "Store",
+    "updated": "Updated",
+    "addToWishlist": "Add to wishlist",
+    "removeFromWishlist": "Remove from wishlist"
+  },
+  "trending": {
+    "title": "Trending products",
+    "subtitle": "Latest updates"
+  },
+  "filters": {
+    "byPrice": "By price",
+    "byStore": "By store",
+    "byCheapest": "Cheapest first"
+  },
+  "errors": {
+    "loading": "Loading error",
+    "search": "Search error",
+    "network": "Network error"
+  },
+  "loading": "Loading...",
+  "noData": "No data"
+}

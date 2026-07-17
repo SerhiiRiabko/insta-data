@@ -92,6 +92,19 @@ const config: Config = {
         '44px': '44px',
         '56px': '56px',
       },
+      // NOTE: the custom spacing keys above (xs/sm/md/lg/xl/2xl/3xl) collide
+      // with Tailwind's named maxWidth scale and silently break `max-w-2xl`,
+      // `max-w-3xl`, `max-w-sm`, `max-w-xs` across the app (they resolve to
+      // the spacing values above - e.g. 3rem instead of the real 42rem -
+      // since Tailwind v3's default `maxWidth` theme spreads the `spacing`
+      // scale in after its own named sizes). Neither an `extend.maxWidth`
+      // override nor a full `theme.maxWidth` replacement here fixes it -
+      // this project's Tailwind v4 `@config`-compat shim (see globals.css)
+      // keeps re-applying that spacing-spread regardless. Worked around at
+      // each call site instead, with arbitrary-value classes like
+      // `max-w-[42rem]` that bypass theme resolution entirely - see
+      // AboutModal.tsx, StoresModal.tsx, ShoppingListModal.tsx,
+      // ShoppingListView.tsx, AuthModal.tsx, and admin/AdminPageClient.tsx.
       borderRadius: {
         none: '0',
         xs: '0.25rem',

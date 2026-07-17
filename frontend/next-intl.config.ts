@@ -4,11 +4,10 @@
  */
 
 import { getRequestConfig } from 'next-intl/server';
-import { ReactNode } from 'react';
 
-export type Locale = 'ukr' | 'rus' | 'mne';
+export type Locale = 'ukr' | 'rus' | 'mne' | 'srb' | 'bos' | 'eng';
 
-export const locales: Locale[] = ['ukr', 'rus', 'mne'];
+export const locales: Locale[] = ['ukr', 'rus', 'mne', 'srb', 'bos', 'eng'];
 export const defaultLocale: Locale = 'ukr';
 
 export const pathnames = {
@@ -17,6 +16,9 @@ export const pathnames = {
     ukr: '/search',
     rus: '/search',
     mne: '/search',
+    srb: '/search',
+    bos: '/search',
+    eng: '/search',
   },
 } as const;
 
