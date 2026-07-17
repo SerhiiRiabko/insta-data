@@ -1,7 +1,7 @@
 # 📊 Insta-Data Project Status
 
 **Last Updated:** 2026-07-17
-**Status:** 🟡 ACTIVE DEVELOPMENT — Phase 4.0-4.6 done, not yet deployed to production
+**Status:** 🟢 DEPLOYED — http://138.199.204.107:3010 (Phase 4.0-4.6 done)
 **Version:** 1.0.0
 
 > ⚠️ **This file is a point-in-time snapshot, updated occasionally.** For the
@@ -112,26 +112,32 @@ Full detail: `PROJECT_MAP.md` → "Bugfix (2026-07-17, 2 частини)" and
 
 ## 🚀 Deployment Status
 
-**Not yet deployed to production.** This has been local-dev-only throughout
-Phase 4. `DEPLOYMENT.md` describes a planned Hetzner VPS setup —
-⚠️ **verify its target server before using it**: it currently points at
-`root@138.199.204.107`, which the top-level workspace `CLAUDE.md` (one level
-up, for the unrelated `hrd-minion` project) marks **"ONLY PRODUCTION"** for a
-different bot. This looks like it may be a copy-paste artifact rather than an
-intentional shared-infrastructure decision — confirm before deploying
-anything there.
+**Deployed (2026-07-17).** Live at http://138.199.204.107:3010 (admin:
+http://138.199.204.107:3010/ukr/admin), backend at
+http://138.199.204.107:8010. Full deployment detail, memory-safety measures,
+and known follow-ups: `CLAUDE.md` changelog entry 23.
 
-### ⚠️ Before Production
-- [ ] Resolve the `DEPLOYMENT.md` target-server question above
-- [ ] Update `.env` with real production secrets (JWT secret, Resend API key
-  already configured/shared per an earlier explicit user decision — see
-  `CLAUDE.md` for which keys are safe to reuse across projects and which
-  aren't)
-- [ ] Configure domain/SSL
-- [ ] Set up database backups
-- [ ] Configure monitoring + logging
-- [ ] Set up CI/CD pipeline (GitHub Actions)
-- [ ] Review security settings
+The target-server question flagged in the previous version of this section
+(same Hetzner VPS as `hrd-minion`) was raised with the user and **explicitly
+confirmed** — shared infrastructure, accepted knowingly. `kartiq-backend` and
+`kartiq-frontend` were stopped (not removed - `supervisorctl start
+kartiq-backend` / `pm2 start kartiq-frontend` to bring back) to free memory
+on an already tight box (232Mi free, 0 swap before this deploy - a 2GB
+swapfile was added as a safety net, and MongoDB's cache was capped to
+avoid it happening again).
+
+### ⚠️ Still before this is a "real" production setup
+- [ ] Domain + SSL/HTTPS (currently plain HTTP on raw ports; the session
+  cookie is deliberately non-`Secure` to work over HTTP - **must** be
+  revisited once a domain exists, see `CLAUDE.md` entry 23)
+- [ ] Resend API key (magic-link email doesn't actually send yet - the
+  bootstrapped admin account uses email+password instead)
+- [ ] Set up database backups (MongoDB has zero backup/snapshot strategy)
+- [ ] Configure monitoring + logging beyond supervisord's stdout/stderr files
+- [ ] Set up CI/CD pipeline (GitHub Actions) - deploys are still manual SSH
+- [ ] Decide whether to restore `kartiq-backend`/`kartiq-frontend` or leave
+  them off; the server is memory-constrained enough that running everything
+  at once isn't comfortably safe
 
 ---
 
@@ -413,8 +419,8 @@ MIT License - See LICENSE file
 
 ---
 
-**Project Status: 🟡 ACTIVE DEVELOPMENT — feature-complete for Phase 4.0-4.6, never deployed to production**
+**Project Status: 🟢 DEPLOYED — http://138.199.204.107:3010 (feature-complete for Phase 4.0-4.6)**
 
-Real cijene.me scraping | 6 locales | Accounts + shopping lists + admin panel | Not yet deployed
+Real cijene.me scraping | 6 locales | Accounts + shopping lists + admin panel | Live, no domain/SSL yet
 
-Next: resolve the `DEPLOYMENT.md` target-server question, then actually deploy. See [PROJECT_MAP.md](PROJECT_MAP.md) for current status.
+Next: domain + HTTPS (and flip the session cookie back to `Secure` once there's one). See [PROJECT_MAP.md](PROJECT_MAP.md) for current status.
