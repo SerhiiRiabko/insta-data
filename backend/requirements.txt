@@ -31,9 +31,11 @@ email-validator==2.3.0  # required by pydantic's EmailStr (auth.py request model
 resend==2.4.0
 
 # 📱 Instagram Scraping
-instagrapi==2.0.0
-pillow==10.1.0         # Image processing
-pytesseract==0.3.10    # OCR for price extraction
+# instagrapi pins pydantic 1.x, which conflicts with the pydantic v2 stack
+# the rest of this app runs on - deliberately NOT installed (see the
+# try/except ImportError guards in services/__init__.py and router.py that
+# keep the real Instagram scraper optional). pytesseract/pillow (OCR) were
+# only used by that same disabled pipeline, so they're out too.
 
 # 🌐 Web Scraping
 playwright==1.40.0
