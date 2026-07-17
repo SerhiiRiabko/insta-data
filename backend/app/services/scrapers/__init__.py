@@ -2,25 +2,16 @@
 Website scrapers package
 
 Implements scrapers for:
-- Aroma.me (Montenegrin grocery)
-- Voli.me (Montenegrin grocery)
-- HDL.me (Montenegrin grocery)
-- IDEA.me (Montenegrin grocery)
+- Cijene.me (aggregates Aroma/Voli/HDL/IDEA prices)
 - Instagram (price posts)
 """
 
 from app.services.scrapers.aroma_scraper import AromaScraper
-from app.services.scrapers.aroma_mock_scraper import AromaMockScraper
-from app.services.scrapers.voli_mock_scraper import VoliMockScraper
-from app.services.scrapers.hdl_mock_scraper import HDLMockScraper
-from app.services.scrapers.idea_mock_scraper import IDEAMockScraper
+from app.services.scrapers.cijene_scraper import CijeneScraper
 from app.services.scrapers.instagram_mock_scraper import InstagramMockScraper
 
 __all__ = [
     "AromaScraper",
-    "AromaMockScraper",
-    "VoliMockScraper",
-    "HDLMockScraper",
-    "IDEAMockScraper",
+    "CijeneScraper",
     "InstagramMockScraper",
 ]

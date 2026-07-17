@@ -40,6 +40,24 @@ class Settings(BaseSettings):
     # 🔐 Security
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    session_expire_days: int = 30  # login session cookie lifetime (Phase 4.2)
+
+    # 📧 Email (magic-link login, Phase 4.2) — same Resend account as
+    # MonteLand/KartIQ; empty in dev falls back to logging the link instead
+    # of sending (see app/services/email_service.py)
+    resend_api_key: str = ""
+    email_from: str = "onboarding@resend.dev"
+    email_from_name: str = "Monte-Shop-Price"
+    frontend_url: str = "http://localhost:3001"
+    backend_url: str = "http://localhost:8001"  # public URL used to build the magic-link itself
+
+    # 🤖 AI product-name translation (Phase 4.6) — optional. Empty in dev
+    # means translate_name() just returns None and callers fall back to the
+    # source-language name; set groq_api_key to enable real translations
+    # (any Groq-compatible free-tier key works, e.g. reuse the one already
+    # used for AI enrichment in the sibling hrd-minion project).
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.1-8b-instant"
 
     # 🌐 CORS
     cors_origins: List[str] = [

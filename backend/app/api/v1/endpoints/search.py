@@ -5,7 +5,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from pydantic import BaseModel, Field
 from app.services.search_service import SearchService
+from app.services.translation_service import SUPPORTED_LOCALES, resolve_display_name
 from app.database.mongodb import get_db
+
+LANG_REGEX = "^(" + "|".join(SUPPORTED_LOCALES) + ")$"
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/search", tags=["search"])
@@ -17,7 +20,7 @@ class ProductSummary(BaseModel):
     name: str
     description: Optional[str]
     image_url: Optional[str]
-    source: str
+    source: Optional[str]
     current_prices: dict[str, float]
     min_price: float
     cheapest_store: Optional[str]
@@ -48,11 +51,12 @@ class StatisticsResponse(BaseModel):
     cheapest: Optional[float]
 
 
-def _format_product(product: dict) -> ProductSummary:
-    """Convert MongoDB product to API response model."""
+def _format_product(product: dict, lang: Optional[str] = None) -> ProductSummary:
+    """Convert MongoDB product to API response model. Resolves the display
+    name via `name_i18n[lang]` when available (Phase 4.6)."""
     return ProductSummary(
         id=str(product.get("_id")),
-        name=product.get("name"),
+        name=resolve_display_name(product, lang) if lang else product.get("name"),
         description=product.get("description"),
         image_url=product.get("image_url"),
         source=product.get("source"),
@@ -74,6 +78,7 @@ async def search_products(
     q: str = Query(..., min_length=1, max_length=200, description="Search query"),
     source: Optional[str] = Query(None, description="Filter by source: instagram, aroma, voli, hdl, idea"),
     limit: int = Query(20, ge=1, le=100, description="Max results"),
+    lang: Optional[str] = Query(None, regex=LANG_REGEX, description="UI locale — also matches translated names"),
     service: SearchService = Depends(get_search_service)
 ) -> SearchResponse:
     """
@@ -83,17 +88,20 @@ async def search_products(
         q: Search query (product name, description)
         source: Optional source filter
         limit: Max results (1-100)
+        lang: UI locale (Phase 4.6) — also matches `name_i18n[lang]`, not
+            just the source-language name, and resolves result names to
+            that locale's translation when available.
 
     Returns:
         Matching products
     """
     try:
-        results = await service.search(q, source=source, limit=limit)
+        results = await service.search(q, source=source, limit=limit, lang=lang)
 
         return SearchResponse(
             query=q,
             count=len(results),
-            results=[_format_product(p) for p in results],
+            results=[_format_product(p, lang) for p in results],
             source_filter=source
         )
     except Exception as e:

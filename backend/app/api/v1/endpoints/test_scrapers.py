@@ -32,79 +32,27 @@ class OrchestratorResponse(BaseModel):
     duration_seconds: float
 
 
-@router.post("/aroma", response_model=TestScraperResponse)
-async def test_aroma_scraper() -> TestScraperResponse:
+@router.post("/cijene", response_model=TestScraperResponse)
+async def test_cijene_scraper() -> TestScraperResponse:
     """
-    Test Aroma.me scraper (debugging endpoint)
+    Test the real Cijene.me scraper (debugging endpoint).
 
-    Response includes:
-    - status: success/failed
-    - products: number of products found
-    - sample_products: first 3 products
-    - duration_seconds: scraping time
+    Covers Aroma/Voli/HDL/IDEA at once, since cijene.me aggregates all 4
+    chains' prices per product.
     """
     import time
     start_time = time.time()
 
     try:
-        # Use mock scraper for testing (no internet access)
-        from app.services.scrapers.aroma_mock_scraper import AromaMockScraper
+        from app.services.scrapers.cijene_scraper import CijeneScraper
 
-        scraper = AromaMockScraper()
-        logger.info("🔄 Testing Aroma scraper...")
-
-        products = await scraper.scrape()
-        duration = time.time() - start_time
-
-        logger.info(f"✅ Aroma test: {len(products)} products in {duration:.1f}s")
-
-        # Return sample products
-        sample = []
-        for p in products[:3]:
-            sample.append({
-                "name": p.name,
-                "price": p.price,
-                "source": p.source,
-                "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
-            })
-
-        return TestScraperResponse(
-            scraper="Aroma",
-            status="success",
-            products=len(products),
-            sample_products=sample,
-            duration_seconds=duration,
-        )
-
-    except Exception as e:
-        duration = time.time() - start_time
-        logger.error(f"❌ Aroma test failed: {e}", exc_info=True)
-        return TestScraperResponse(
-            scraper="Aroma",
-            status="failed",
-            products=0,
-            sample_products=[],
-            error=str(e),
-            duration_seconds=duration,
-        )
-
-
-@router.post("/voli", response_model=TestScraperResponse)
-async def test_voli_scraper() -> TestScraperResponse:
-    """Test Voli.me scraper"""
-    import time
-    start_time = time.time()
-
-    try:
-        from app.services.scrapers.voli_mock_scraper import VoliMockScraper
-
-        scraper = VoliMockScraper()
-        logger.info("Testing Voli scraper...")
+        scraper = CijeneScraper()
+        logger.info("🔄 Testing Cijene.me scraper...")
 
         products = await scraper.scrape()
         duration = time.time() - start_time
 
-        logger.info(f"Voli test: {len(products)} products in {duration:.1f}s")
+        logger.info(f"✅ Cijene.me test: {len(products)} products in {duration:.1f}s")
 
         sample = []
         for p in products[:3]:
@@ -116,7 +64,7 @@ async def test_voli_scraper() -> TestScraperResponse:
             })
 
         return TestScraperResponse(
-            scraper="Voli",
+            scraper="Cijene.me",
             status="success",
             products=len(products),
             sample_products=sample,
@@ -125,99 +73,9 @@ async def test_voli_scraper() -> TestScraperResponse:
 
     except Exception as e:
         duration = time.time() - start_time
-        logger.error(f"Voli test failed: {e}", exc_info=True)
+        logger.error(f"❌ Cijene.me test failed: {e}", exc_info=True)
         return TestScraperResponse(
-            scraper="Voli",
-            status="failed",
-            products=0,
-            sample_products=[],
-            error=str(e),
-            duration_seconds=duration,
-        )
-
-
-@router.post("/hdl", response_model=TestScraperResponse)
-async def test_hdl_scraper() -> TestScraperResponse:
-    """Test HDL.me scraper"""
-    import time
-    start_time = time.time()
-
-    try:
-        from app.services.scrapers.hdl_mock_scraper import HDLMockScraper
-
-        scraper = HDLMockScraper()
-        logger.info("Testing HDL scraper...")
-
-        products = await scraper.scrape()
-        duration = time.time() - start_time
-
-        sample = []
-        for p in products[:3]:
-            sample.append({
-                "name": p.name,
-                "price": p.price,
-                "source": p.source,
-                "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
-            })
-
-        return TestScraperResponse(
-            scraper="HDL",
-            status="success",
-            products=len(products),
-            sample_products=sample,
-            duration_seconds=duration,
-        )
-
-    except Exception as e:
-        duration = time.time() - start_time
-        logger.error(f"HDL test failed: {e}", exc_info=True)
-        return TestScraperResponse(
-            scraper="HDL",
-            status="failed",
-            products=0,
-            sample_products=[],
-            error=str(e),
-            duration_seconds=duration,
-        )
-
-
-@router.post("/idea", response_model=TestScraperResponse)
-async def test_idea_scraper() -> TestScraperResponse:
-    """Test IDEA.me scraper"""
-    import time
-    start_time = time.time()
-
-    try:
-        from app.services.scrapers.idea_mock_scraper import IDEAMockScraper
-
-        scraper = IDEAMockScraper()
-        logger.info("Testing IDEA scraper...")
-
-        products = await scraper.scrape()
-        duration = time.time() - start_time
-
-        sample = []
-        for p in products[:3]:
-            sample.append({
-                "name": p.name,
-                "price": p.price,
-                "source": p.source,
-                "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
-            })
-
-        return TestScraperResponse(
-            scraper="IDEA",
-            status="success",
-            products=len(products),
-            sample_products=sample,
-            duration_seconds=duration,
-        )
-
-    except Exception as e:
-        duration = time.time() - start_time
-        logger.error(f"IDEA test failed: {e}", exc_info=True)
-        return TestScraperResponse(
-            scraper="IDEA",
+            scraper="Cijene.me",
             status="failed",
             products=0,
             sample_products=[],

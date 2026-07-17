@@ -107,3 +107,55 @@ class ProductResponse(BaseModel):
                 "updated_at": "2026-06-16T10:30:00"
             }
         }
+
+
+class Store(BaseModel):
+    """Store metadata for display."""
+    name: str = Field(..., description="Store name")
+    initial: str = Field(..., description="Short initial (1-2 chars)")
+    color: str = Field(..., description="Hex color for UI")
+
+
+class ProductGroup(BaseModel):
+    """Grouped product across multiple stores."""
+    id: str = Field(..., description="Hash ID of canonical name + category")
+    canonical_name: str = Field(..., description="Normalized product name")
+    category: str = Field(..., description="Product category")
+    unit: str = Field(default="1x", description="Standardized unit (1L, 500g, etc.)")
+    products: list[Product] = Field(default_factory=list, description="One product per store")
+    prices_by_store: dict[str, float] = Field(default_factory=dict, description="Prices per store")
+    min_price: float = Field(default=float('inf'), description="Cheapest price")
+    max_price: float = Field(default=0, description="Most expensive price")
+    cheapest_store: Optional[str] = Field(default=None, description="Store with lowest price")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "abc123hash",
+                "canonical_name": "Milk Kiš 1L",
+                "category": "Dairy",
+                "unit": "1L",
+                "products": [],
+                "prices_by_store": {
+                    "Aroma": 1.49,
+                    "Voli": 1.45,
+                    "HDL": 1.52,
+                    "IDEA": 1.39,
+                    "Instagram": 1.89
+                },
+                "min_price": 1.39,
+                "max_price": 1.89,
+                "cheapest_store": "IDEA",
+                "updated_at": "2026-07-03T10:00:00"
+            }
+        }
+
+
+class ProductMatrix(BaseModel):
+    """Response for price matrix endpoint."""
+    stores: list[Store] = Field(default_factory=list, description="List of stores")
+    groups: list[ProductGroup] = Field(default_factory=list, description="Grouped products")
+    total_groups: int = Field(default=0, description="Number of unique product groups")
+    total_products: int = Field(default=0, description="Total products across all stores")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update")

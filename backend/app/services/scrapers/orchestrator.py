@@ -27,28 +27,12 @@ class ScraperOrchestrator:
     def _register_scrapers(self):
         """Register all available scrapers"""
         try:
-            from app.services.scrapers.aroma_mock_scraper import AromaMockScraper
-            self.scrapers["aroma"] = AromaMockScraper()
+            from app.services.scrapers.cijene_scraper import CijeneScraper
+            # Real data source: one scraper covers Aroma/Voli/HDL/IDEA at once,
+            # since cijene.me already aggregates all 4 chains' prices per product.
+            self.scrapers["cijene"] = CijeneScraper()
         except Exception as e:
-            logger.error(f"Failed to load Aroma scraper: {e}")
-
-        try:
-            from app.services.scrapers.voli_mock_scraper import VoliMockScraper
-            self.scrapers["voli"] = VoliMockScraper()
-        except Exception as e:
-            logger.error(f"Failed to load Voli scraper: {e}")
-
-        try:
-            from app.services.scrapers.hdl_mock_scraper import HDLMockScraper
-            self.scrapers["hdl"] = HDLMockScraper()
-        except Exception as e:
-            logger.error(f"Failed to load HDL scraper: {e}")
-
-        try:
-            from app.services.scrapers.idea_mock_scraper import IDEAMockScraper
-            self.scrapers["idea"] = IDEAMockScraper()
-        except Exception as e:
-            logger.error(f"Failed to load IDEA scraper: {e}")
+            logger.error(f"Failed to load Cijene.me scraper: {e}")
 
         try:
             from app.services.scrapers.instagram_mock_scraper import InstagramMockScraper
@@ -174,6 +158,8 @@ class ScraperOrchestrator:
                     "name": p.name,
                     "price": p.price,
                     "source": p.source,
+                    "category": p.category,
+                    "image_url": p.image_url,
                     "url": p.url[:60] + "..." if len(p.url) > 60 else p.url,
                 })
 

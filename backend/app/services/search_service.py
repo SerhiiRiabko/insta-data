@@ -23,7 +23,8 @@ class SearchService:
         query: str,
         source: Optional[str] = None,
         limit: int = 20,
-        use_cache: bool = True
+        use_cache: bool = True,
+        lang: Optional[str] = None,
     ) -> list[dict]:
         """
         Search products by name/description.
@@ -33,12 +34,18 @@ class SearchService:
             source: Filter by source (instagram, aroma, voli, hdl, idea) or None for all
             limit: Max results
             use_cache: Use Redis cache
+            lang: UI locale (Phase 4.6) — when set, also matches the query
+                against each product's translated `name_i18n[lang]`, not just
+                the source-language `name`, so search respects the active UI
+                language (products without a cached translation for `lang`
+                are still found via the source-name match, per the documented
+                fallback).
 
         Returns:
             List of matching products
         """
         # Check cache first
-        cache_key = f"cache:search:{query}:{source or 'all'}"
+        cache_key = f"cache:search:{query}:{source or 'all'}:{lang or ''}"
         if use_cache and self.redis:
             cached = await self._get_from_cache(cache_key)
             if cached:
@@ -50,13 +57,38 @@ class SearchService:
         if source:
             search_filter["source"] = source
 
+        # `$text` needs a text index (see main.py startup / product_service.py
+        # ensure_indexes()); if it's ever missing this must NOT take down the
+        # whole search - the name_i18n regex fallback below should still run.
         try:
             cursor = self.collection.find(
                 search_filter,
                 {"score": {"$meta": "textScore"}}
             ).sort([("score", {"$meta": "textScore"})]).limit(limit)
-
             results = await cursor.to_list(length=limit)
+        except Exception as e:
+            logger.warning(f"$text search failed for '{query}' (missing index?): {e}")
+            results = []
+
+        try:
+            # `$text` only covers the source-language `name`/`description`
+            # fields (single text index, see product_service.py). A separate
+            # case-insensitive regex pass against `name_i18n.{lang}` catches
+            # matches typed in the active UI language that don't appear in
+            # the source name at all - merged in and deduped by id.
+            if lang and len(results) < limit:
+                seen_ids = {r.get("id") or str(r.get("_id")) for r in results}
+                i18n_filter: dict = {
+                    f"name_i18n.{lang}": {"$regex": query, "$options": "i"}
+                }
+                if source:
+                    i18n_filter["source"] = source
+                extra_cursor = self.collection.find(i18n_filter).limit(limit - len(results))
+                for doc in await extra_cursor.to_list(length=limit - len(results)):
+                    doc_id = doc.get("id") or str(doc.get("_id"))
+                    if doc_id not in seen_ids:
+                        results.append(doc)
+                        seen_ids.add(doc_id)
 
             # Cache results
             if self.redis:
@@ -67,7 +99,7 @@ class SearchService:
 
         except Exception as e:
             logger.error(f"Search failed for '{query}': {e}")
-            return []
+            return results
 
     async def filter_by_price(
         self,
