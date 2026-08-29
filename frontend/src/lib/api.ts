@@ -6,6 +6,8 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import type { Lang } from './productMatrix';
 
+export type Country = 'ME' | 'UA';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
 
 const api: AxiosInstance = axios.create({
@@ -39,28 +41,36 @@ export default api;
  * Products API functions (Frontend Integration)
  */
 export const productsAPI = {
-  priceMatrix: (lang: Lang = 'ukr') =>
-    api.get('/products/matrix', { params: { lang } }),
+  priceMatrix: (lang: Lang = 'ukr', country: Country = 'ME') =>
+    api.get('/products/matrix', { params: { lang, country } }),
 
   // Fast default for page load: last persisted scan from MongoDB, refreshed
   // automatically once a week (Mon 07:00 Kyiv) by the backend scheduler.
   // Phase 4.6: `lang` resolves each product's translated name server-side
   // (falls back to the source name when no translation is cached yet).
-  matrixCached: (lang: Lang = 'ukr') =>
-    api.get('/products/matrix-cached', { params: { lang } }),
+  matrixCached: (lang: Lang = 'ukr', country: Country = 'ME') =>
+    api.get('/products/matrix-cached', { params: { lang, country } }),
 
   // Manual "Оновити ціни" trigger + the weekly scheduled job on the backend
   // both hit the real cijene.me scrape (~10-15s), hence the longer timeout.
-  priceMatrixLive: (lang: Lang = 'ukr') =>
-    api.get('/products/matrix-live', { params: { lang }, timeout: 30000 }),
+  // Montenegro-only pipeline for now - see backend products.py docstrings.
+  priceMatrixLive: (lang: Lang = 'ukr', country: Country = 'ME') =>
+    api.get('/products/matrix-live', { params: { lang, country }, timeout: 30000 }),
 
   // Same live scrape as priceMatrixLive, grouped into product-group
   // categories (Овочі, Фрукти, Молочка, Бакалія...) instead of a flat list.
-  byCategory: (lang: Lang = 'ukr') =>
-    api.get('/products/by-category', { params: { lang }, timeout: 30000 }),
+  byCategory: (lang: Lang = 'ukr', country: Country = 'ME') =>
+    api.get('/products/by-category', { params: { lang, country }, timeout: 30000 }),
 
   list: (limit: number = 50, skip: number = 0, lang: Lang = 'ukr') =>
     api.get('/products/list', { params: { limit, skip, lang } }),
+};
+
+/**
+ * Countries API — backs the country selector (site header + admin store form).
+ */
+export const countriesAPI = {
+  list: () => api.get('/countries'),
 };
 
 /**
@@ -126,11 +136,12 @@ export interface StoreInput {
   color: string;
   url: string;
   active: boolean;
+  country: Country;
 }
 
 export const storesAPI = {
-  list: (includeInactive = false) =>
-    api.get('/stores', { params: { include_inactive: includeInactive } }),
+  list: (includeInactive = false, country?: Country) =>
+    api.get('/stores', { params: { include_inactive: includeInactive, country } }),
 
   create: (store: StoreInput) => api.post('/stores', store),
 

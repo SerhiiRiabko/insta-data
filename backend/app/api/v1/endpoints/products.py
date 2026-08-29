@@ -74,12 +74,19 @@ class ProductListResponse(BaseModel):
 # MOCK DATA (fallback when DB is empty)
 # ============================================================================
 
-MOCK_STORES = [
+COUNTRY_REGEX = "^(ME|UA)$"
+
+# Last-resort fallback for Montenegro if `db.stores` is empty/unreachable -
+# kept for the same reason MOCK_PRODUCTS is: the live endpoints must degrade
+# gracefully, never hard-fail, when Mongo is down. There is no Ukraine
+# equivalent (no data exists yet for that country either way).
+FALLBACK_STORES_ME = [
     {"name": "Aroma", "initial": "A", "color": "#e11d48"},
     {"name": "Voli", "initial": "V", "color": "#2563eb"},
     {"name": "HDL", "initial": "H", "color": "#d97706"},
     {"name": "IDEA", "initial": "I", "color": "#0891b2"},
 ]
+MOCK_STORES = FALLBACK_STORES_ME  # kept for the two old callers that never took a country
 
 MOCK_PRODUCTS = [
     {
@@ -137,6 +144,27 @@ MOCK_PRODUCTS = [
 # HELPER FUNCTIONS
 # ============================================================================
 
+async def get_stores_for_country(country: str) -> List[dict]:
+    """Active stores for one country, from the admin-editable `db.stores`
+    collection (Phase 4.3) - falls back to the hardcoded Montenegro list only
+    if Mongo is empty/unreachable, so the price matrix never hard-fails."""
+    from app.api.v1.endpoints.stores import _ensure_seeded
+
+    try:
+        db = get_mongo_db()
+        await _ensure_seeded()
+        docs = await asyncio.wait_for(
+            db.stores.find({"country": country, "active": True}).sort("name", 1).to_list(length=50),
+            timeout=5.0,
+        )
+        if docs:
+            return [{"name": d["name"], "initial": d["initial"], "color": d["color"]} for d in docs]
+    except Exception as e:
+        logger.warning(f"get_stores_for_country({country}): falling back ({e})")
+
+    return FALLBACK_STORES_ME if country == "ME" else []
+
+
 def calculate_cheapest(prices: List[Optional[float]]) -> tuple:
     """
     Calculate min price and cheapest store index.
@@ -177,6 +205,7 @@ def format_product_row(product: dict, stores: List[dict], lang: str = "ukr") -> 
 @router.get("/matrix", response_model=PriceMatrixResponse)
 async def get_price_matrix(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
+    country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
     db=Depends(get_db)
 ) -> PriceMatrixResponse:
     """
@@ -189,20 +218,20 @@ async def get_price_matrix(
         - total_products: number of products
 
     Example:
-        GET /api/v1/products/matrix?lang=ukr
+        GET /api/v1/products/matrix?lang=ukr&country=ME
     """
+    stores = await get_stores_for_country(country)
     try:
         # Try to fetch from MongoDB
         products_collection = db.products
-        products = await products_collection.find().limit(100).to_list(100)
+        products = await products_collection.find({"country": country}).limit(100).to_list(100)
 
-        # If no data, use mock
-        if not products:
+        # No data yet: Montenegro has curated mock data to fall back to;
+        # other countries just show an empty matrix (real stores, no prices).
+        if not products and country == "ME":
             logger.info("No products in DB, using mock data")
             products = MOCK_PRODUCTS
-            stores = MOCK_STORES
-        else:
-            stores = MOCK_STORES  # TODO: fetch from config
+            stores = FALLBACK_STORES_ME
 
         # Format response
         product_rows = [format_product_row(p, stores, lang) for p in products]
@@ -216,8 +245,10 @@ async def get_price_matrix(
 
     except Exception as e:
         logger.error(f"Failed to get price matrix: {e}")
+        if country != "ME":
+            return PriceMatrixResponse(stores=stores, products=[], updated_at=datetime.utcnow().isoformat(), total_products=0)
         # Fallback to mock data
-        stores = MOCK_STORES
+        stores = FALLBACK_STORES_ME
         product_rows = [format_product_row(p, stores, lang) for p in MOCK_PRODUCTS]
 
         return PriceMatrixResponse(
@@ -304,7 +335,7 @@ async def get_product_list(
 
 
 
-async def _persist_live_products(products: List[dict]) -> None:
+async def _persist_live_products(products: List[dict], country: str = "ME") -> None:
     """
     Upsert freshly-scraped products into MongoDB's `products` collection so
     `/matrix` can serve them without re-scraping, and keep a bounded price
@@ -331,6 +362,7 @@ async def _persist_live_products(products: List[dict]) -> None:
             "min_price": product.get("min_price"),
             "cheapest_store": product.get("cheapest_store"),
             "category": product.get("category"),
+            "country": country,
             "updated_at": now,
         }
         # Dictionary translation is free/deterministic - recompute on every
@@ -340,8 +372,11 @@ async def _persist_live_products(products: List[dict]) -> None:
             if translated:
                 set_fields[f"name_i18n.{locale}"] = translated
 
+        # Matched on (id, country), not just id: the same content hash could
+        # in principle collide across two countries' independent catalogs,
+        # and they must never overwrite each other's price row.
         await collection.update_one(
-            {"id": product["id"]},
+            {"id": product["id"], "country": country},
             {
                 "$set": set_fields,
                 "$push": {
@@ -354,10 +389,10 @@ async def _persist_live_products(products: List[dict]) -> None:
             upsert=True,
         )
 
-    logger.info(f"Persisted {len(products)} live products to MongoDB")
+    logger.info(f"Persisted {len(products)} live products ({country}) to MongoDB")
 
 
-async def _persist_live_products_background(products: List[dict]) -> None:
+async def _persist_live_products_background(products: List[dict], country: str = "ME") -> None:
     """
     Fire-and-forget wrapper around _persist_live_products().
 
@@ -369,7 +404,7 @@ async def _persist_live_products_background(products: List[dict]) -> None:
     Mongo never slows down the live price matrix response.
     """
     try:
-        await asyncio.wait_for(_persist_live_products(products), timeout=5.0)
+        await asyncio.wait_for(_persist_live_products(products, country), timeout=5.0)
     except Exception as e:
         logger.warning(f"Failed to persist live matrix to MongoDB: {e}")
 
@@ -414,15 +449,15 @@ async def _scrape_and_group_live() -> tuple[list, list]:
     return grouped, all_products
 
 
-def _build_product_row(group: dict, lang: str = "ukr") -> dict:
+def _build_product_row(group: dict, stores: List[dict], lang: str = "ukr") -> dict:
     """Convert one ProductMatcherService group into the {id, name, unit,
     prices[], image_url, ...} shape the frontend price matrix expects, with
-    `prices` aligned to MOCK_STORES order. Freshly-scraped groups have no
-    `name_i18n` cache yet, so `resolve_display_name` naturally falls back to
-    `canonical_name` here until the group has gone through /matrix-cached and
-    been translated (admin-triggered or lazy background translation)."""
+    `prices` aligned to the given stores' order. Freshly-scraped groups have
+    no `name_i18n` cache yet, so `resolve_display_name` naturally falls back
+    to `canonical_name` here until the group has gone through /matrix-cached
+    and been translated (admin-triggered or lazy background translation)."""
     prices_by_store = group.get("prices_by_store", {})
-    prices = [prices_by_store.get(store["name"].lower()) for store in MOCK_STORES]
+    prices = [prices_by_store.get(store["name"].lower()) for store in stores]
     min_price, cheapest_idx = calculate_cheapest(prices)
     image_url = next(
         (p.get("image_url") for p in group.get("products", []) if p.get("image_url")),
@@ -434,7 +469,7 @@ def _build_product_row(group: dict, lang: str = "ukr") -> dict:
         "unit": group["unit"],
         "prices": prices,
         "min_price": min_price,
-        "cheapest_store": MOCK_STORES[cheapest_idx]["name"] if cheapest_idx >= 0 else None,
+        "cheapest_store": stores[cheapest_idx]["name"] if cheapest_idx >= 0 else None,
         "image_url": image_url,
         "category": classify_group_category(group.get("category"), group.get("canonical_name", "")),
     }
@@ -443,20 +478,26 @@ def _build_product_row(group: dict, lang: str = "ukr") -> dict:
 @router.get("/matrix-live")
 async def get_price_matrix_live(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
+    country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
 ):
+    stores = await get_stores_for_country(country)
+    if country != "ME":
+        # No scraper pipeline exists yet for this country - see /by-category
+        # docstring for why this can't just run the Montenegro cijene.me scrape.
+        return {"stores": stores, "products": [], "groups": [], "total_groups": 0, "total_products": 0}
     try:
         logger.info("Running live scraper orchestrator with product matching...")
         grouped, all_products = await _scrape_and_group_live()
 
         if not grouped and not all_products:
-            return {"stores": MOCK_STORES, "products": [], "groups": [], "total_groups": 0, "total_products": 0}
+            return {"stores": stores, "products": [], "groups": [], "total_groups": 0, "total_products": 0}
 
-        products = [_build_product_row(group, lang) for group in grouped]
+        products = [_build_product_row(group, stores, lang) for group in grouped]
 
-        asyncio.create_task(_persist_live_products_background(products))
+        asyncio.create_task(_persist_live_products_background(products, country))
 
         return {
-            "stores": MOCK_STORES,
+            "stores": stores,
             "products": products,
             "groups": grouped,
             "total_groups": len(grouped),
@@ -466,31 +507,41 @@ async def get_price_matrix_live(
 
     except Exception as e:
         logger.error(f"Failed to get live price matrix: {e}")
-        return {"stores": MOCK_STORES, "products": [], "groups": [], "total_groups": 0, "total_products": 0}
+        return {"stores": stores, "products": [], "groups": [], "total_groups": 0, "total_products": 0}
 
 
 @router.get("/by-category")
 async def get_products_by_category(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
+    country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
 ):
     """
     Same live cijene.me + Instagram scrape as /matrix-live, but grouped into
     product-group buckets (Овочі, Фрукти, Молочка, Бакалія, Дитячі товари...)
     instead of a flat list - see app/services/category_map.py for the
     cijene.me-category -> Ukrainian-label mapping.
+
+    Montenegro-only for now: cijene.me is the only real scraper pipeline;
+    Ukraine has no scraper yet (per-store, not an aggregator - see the
+    "Shop Price Online" project plan), so `country=UA` just returns the
+    (empty) Ukraine store list with no products, same shape either way.
     """
     from app.services.category_map import category_sort_key
+
+    stores = await get_stores_for_country(country)
+    if country != "ME":
+        return {"stores": stores, "categories": [], "total_products": 0}
 
     try:
         logger.info("Running live scraper orchestrator for category grouping...")
         grouped, all_products = await _scrape_and_group_live()
 
         if not grouped and not all_products:
-            return {"stores": MOCK_STORES, "categories": [], "total_products": 0}
+            return {"stores": stores, "categories": [], "total_products": 0}
 
         buckets: dict[str, list] = {}
         for group in grouped:
-            row = _build_product_row(group, lang)
+            row = _build_product_row(group, stores, lang)
             buckets.setdefault(row["category"], []).append(row)
 
         categories = [
@@ -499,11 +550,11 @@ async def get_products_by_category(
         ]
 
         asyncio.create_task(
-            _persist_live_products_background([p for cat in categories for p in cat["products"]])
+            _persist_live_products_background([p for cat in categories for p in cat["products"]], country)
         )
 
         return {
-            "stores": MOCK_STORES,
+            "stores": stores,
             "categories": categories,
             "total_products": len(all_products),
             "updated_at": datetime.utcnow().isoformat(),
@@ -511,12 +562,13 @@ async def get_products_by_category(
 
     except Exception as e:
         logger.error(f"Failed to get products by category: {e}")
-        return {"stores": MOCK_STORES, "categories": [], "total_products": 0}
+        return {"stores": stores, "categories": [], "total_products": 0}
 
 
 @router.get("/matrix-cached")
 async def get_price_matrix_cached(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
+    country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
 ):
     """
     Default endpoint for page load: serves the last persisted scan from
@@ -528,25 +580,32 @@ async def get_price_matrix_cached(
     Falls back to mock data if Mongo is empty or unreachable - capped at 5s so
     an unreachable Mongo host never blocks the page load. `lang` resolves
     each product's `name_i18n[lang]` if it's been translated (Phase 4.6),
-    else falls back to the original scraped name.
+    else falls back to the original scraped name. Mock data only makes sense
+    for Montenegro (the only country with curated mock rows); other countries
+    with no persisted data yet get a real (empty) store list and `source:
+    "empty"` instead, so the frontend can show "no data yet" rather than
+    silently showing Montenegro's mock prices under the wrong country.
     """
+    stores = await get_stores_for_country(country)
     docs: list = []
     try:
         db = get_mongo_db()
         docs = await asyncio.wait_for(
-            db.products.find().sort("updated_at", -1).to_list(2000), timeout=5.0
+            db.products.find({"country": country}).sort("updated_at", -1).to_list(2000), timeout=5.0
         )
     except Exception as e:
-        logger.warning(f"matrix-cached: falling back to mock data ({e})")
+        logger.warning(f"matrix-cached: falling back ({e})")
 
     if not docs:
-        return {
-            "stores": MOCK_STORES,
-            "products": [format_product_row(p, MOCK_STORES, lang).model_dump() for p in MOCK_PRODUCTS],
-            "total_products": len(MOCK_PRODUCTS),
-            "updated_at": None,
-            "source": "mock",
-        }
+        if country == "ME":
+            return {
+                "stores": FALLBACK_STORES_ME,
+                "products": [format_product_row(p, FALLBACK_STORES_ME, lang).model_dump() for p in MOCK_PRODUCTS],
+                "total_products": len(MOCK_PRODUCTS),
+                "updated_at": None,
+                "source": "mock",
+            }
+        return {"stores": stores, "products": [], "total_products": 0, "updated_at": None, "source": "empty"}
 
     products = [
         {
@@ -564,7 +623,7 @@ async def get_price_matrix_cached(
     latest_update = max((d["updated_at"] for d in docs if d.get("updated_at")), default=None)
 
     return {
-        "stores": MOCK_STORES,
+        "stores": stores,
         "products": products,
         "total_products": len(products),
         "updated_at": latest_update.isoformat() if latest_update else None,
@@ -578,6 +637,8 @@ async def refresh_prices_job() -> None:
     app/main.py) - the same work /matrix-live does per-request, but awaited
     directly rather than fire-and-forget, since a background scheduler job
     has no HTTP response to protect from a slow Mongo write.
+
+    Montenegro-only: cijene.me is the only scraper pipeline that exists.
     """
     try:
         logger.info("Scheduled price refresh: starting live scrape...")
@@ -586,8 +647,9 @@ async def refresh_prices_job() -> None:
             logger.warning("Scheduled price refresh: scrape returned no products")
             return
 
-        products = [_build_product_row(group) for group in grouped]
-        await _persist_live_products(products)
+        stores = await get_stores_for_country("ME")
+        products = [_build_product_row(group, stores) for group in grouped]
+        await _persist_live_products(products, "ME")
         logger.info(f"Scheduled price refresh: persisted {len(products)} products")
     except Exception as e:
         logger.error(f"Scheduled price refresh failed: {e}")

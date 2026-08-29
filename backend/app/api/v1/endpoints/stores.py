@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stores", tags=["stores"])
 
 SEED_STORES = [
-    {"name": "Aroma", "initial": "A", "color": "#e11d48", "url": "https://aromamarketi.me/uvijek-svjeze/"},
-    {"name": "Voli", "initial": "V", "color": "#2563eb", "url": "https://voli.me/"},
-    {"name": "HDL", "initial": "H", "color": "#d97706", "url": "https://www.digitalniletak.me/hd-lakovic"},
-    {"name": "IDEA", "initial": "I", "color": "#0891b2", "url": "https://www.idea.co.me/"},
+    {"name": "Aroma", "initial": "A", "color": "#e11d48", "url": "https://aromamarketi.me/uvijek-svjeze/", "country": "ME"},
+    {"name": "Voli", "initial": "V", "color": "#2563eb", "url": "https://voli.me/", "country": "ME"},
+    {"name": "HDL", "initial": "H", "color": "#d97706", "url": "https://www.digitalniletak.me/hd-lakovic", "country": "ME"},
+    {"name": "IDEA", "initial": "I", "color": "#0891b2", "url": "https://www.idea.co.me/", "country": "ME"},
 ]
 
 
@@ -40,6 +40,7 @@ class StoreIn(BaseModel):
     color: str
     url: str
     active: bool = True
+    country: str = "ME"
 
 
 async def _ensure_seeded():
@@ -61,14 +62,20 @@ def _store_response(doc: dict) -> dict:
         "color": doc["color"],
         "url": doc["url"],
         "active": doc.get("active", True),
+        # Stores seeded before country support (Phase "Shop Price Online")
+        # have no `country` field - default them to ME (Montenegro), the only
+        # country that existed at the time.
+        "country": doc.get("country", "ME"),
     }
 
 
 @router.get("")
-async def list_stores(include_inactive: bool = False):
+async def list_stores(include_inactive: bool = False, country: str | None = None):
     await _ensure_seeded()
     db = get_mongo_db()
     query = {} if include_inactive else {"active": True}
+    if country:
+        query["country"] = country
     docs = await db.stores.find(query).sort("name", 1).to_list(length=200)
     return {"stores": [_store_response(d) for d in docs]}
 

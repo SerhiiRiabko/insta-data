@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { storesAPI } from '@/lib/api';
+import { storesAPI, type Country } from '@/lib/api';
 import type { Lang } from '@/lib/productMatrix';
 
 interface StoresModalProps {
   isOpen: boolean;
   onClose: () => void;
   lang: Lang;
+  country: Country;
 }
 
 interface Store {
@@ -73,19 +74,18 @@ const translations: Record<Lang, {
   },
 };
 
-export function StoresModal({ isOpen, onClose, lang }: StoresModalProps) {
+export function StoresModal({ isOpen, onClose, lang, country }: StoresModalProps) {
   const t = translations[lang];
-  const [stores, setStores] = useState<Store[]>(FALLBACK_STORES);
+  const [stores, setStores] = useState<Store[]>(country === 'ME' ? FALLBACK_STORES : []);
 
   useEffect(() => {
     if (!isOpen) return;
+    setStores(country === 'ME' ? FALLBACK_STORES : []);
     storesAPI
-      .list()
-      .then((res) => {
-        if (res.data.stores?.length > 0) setStores(res.data.stores);
-      })
-      .catch((err) => console.warn('Failed to load stores, using fallback:', err));
-  }, [isOpen]);
+      .list(false, country)
+      .then((res) => setStores(res.data.stores ?? []))
+      .catch((err) => console.warn('Failed to load stores:', err));
+  }, [isOpen, country]);
 
   if (!isOpen) return null;
 

@@ -13,6 +13,7 @@ interface StoreRow {
   color: string;
   url: string;
   active: boolean;
+  country: 'ME' | 'UA';
 }
 
 interface UserRow {
@@ -37,7 +38,8 @@ interface ScraperAgentRow {
   last_run_error: string | null;
 }
 
-const EMPTY_STORE: StoreInput = { name: '', initial: '', color: '#0b6e4f', url: '', active: true };
+const EMPTY_STORE: StoreInput = { name: '', initial: '', color: '#0b6e4f', url: '', active: true, country: 'ME' };
+const COUNTRY_LABEL: Record<'ME' | 'UA', string> = { ME: '🇲🇪 Чорногорія', UA: '🇺🇦 Україна' };
 const EMPTY_AGENT: ScraperAgentInput = { name: '', strategy: 'custom', store_ids: [], url: '', active: true };
 
 export function AdminPageClient() {
@@ -128,7 +130,7 @@ function StoresTab() {
 
   const startEdit = (s: StoreRow) => {
     setEditing(s);
-    setForm({ name: s.name, initial: s.initial, color: s.color, url: s.url, active: s.active });
+    setForm({ name: s.name, initial: s.initial, color: s.color, url: s.url, active: s.active, country: s.country });
   };
 
   const startCreate = () => {
@@ -172,6 +174,9 @@ function StoresTab() {
         {stores.map((s) => (
           <div key={s.id} className="flex items-center gap-3 px-4 py-3">
             <span className="w-6 h-6 rounded flex-shrink-0" style={{ backgroundColor: s.color }} />
+            <span className="text-xs flex-shrink-0" style={{ color: '#52736a' }}>
+              {COUNTRY_LABEL[s.country] ?? s.country}
+            </span>
             <span className="font-medium flex-1" style={{ color: s.active ? '#0f1419' : '#a3b5ae' }}>
               {s.name} {!s.active && '(вимкнено)'}
             </span>
@@ -196,7 +201,12 @@ function StoresTab() {
             <input placeholder="Назва" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: '#d0d9d5' }} />
             <input placeholder="Ініціал (1 літера)" value={form.initial} maxLength={2} onChange={(e) => setForm({ ...form, initial: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: '#d0d9d5' }} />
             <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 border rounded-lg" style={{ borderColor: '#d0d9d5' }} />
-            <input placeholder="URL сайту" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: '#d0d9d5' }} />
+            <select value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value as 'ME' | 'UA' })} className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: '#d0d9d5' }}>
+              {Object.entries(COUNTRY_LABEL).map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+            <input placeholder="URL сайту" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} className="px-3 py-2 border rounded-lg text-sm col-span-2" style={{ borderColor: '#d0d9d5' }} />
           </div>
           <div className="flex gap-2">
             <button onClick={save} className="text-sm font-semibold rounded-lg" style={{ padding: '8px 16px', backgroundColor: '#0b6e4f', color: 'white', border: 'none', cursor: 'pointer' }}>

@@ -3,7 +3,7 @@
 import logging
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import search, products, test_scrapers, lists, auth, stores, admin, scraper_agents
+from app.api.v1.endpoints import search, products, test_scrapers, lists, auth, stores, admin, scraper_agents, countries
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ api_router.include_router(auth.router)  # Accounts (Phase 4.2)
 api_router.include_router(stores.router)  # Stores (Phase 4.3)
 api_router.include_router(admin.router)  # Admin panel (Phase 4.4)
 api_router.include_router(scraper_agents.router)  # Scraper agents (Phase 4.5)
+api_router.include_router(countries.router)  # Country selector (multi-country)
 
 # The Instagram router (and the legacy scrapers router, which pulls in the
 # same chain via app.services.orchestrator) need instagrapi, which pins

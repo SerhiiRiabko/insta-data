@@ -28,8 +28,30 @@ import { ShoppingListModal } from './ShoppingListModal';
 import { StoresModal } from './StoresModal';
 import { AboutModal } from './AboutModal';
 import { AuthModal } from './AuthModal';
-import { productsAPI, authAPI } from '@/lib/api';
+import { productsAPI, authAPI, countriesAPI, type Country } from '@/lib/api';
 import { DEFAULT_STORES, ALL_LANGS, LANG_LABEL, type Lang } from '@/lib/productMatrix';
+
+const COUNTRY_STORAGE_KEY = 'shopPriceCountry';
+
+interface CountryOption {
+  code: Country;
+  flag: string;
+  name: Record<Lang, string>;
+}
+
+// Fallback while /api/v1/countries loads (or if it's unreachable).
+const FALLBACK_COUNTRIES: CountryOption[] = [
+  {
+    code: 'ME',
+    flag: '🇲🇪',
+    name: { ukr: 'Чорногорія', rus: 'Черногория', mne: 'Crna Gora', srb: 'Crna Gora', bos: 'Crna Gora', eng: 'Montenegro' },
+  },
+  {
+    code: 'UA',
+    flag: '🇺🇦',
+    name: { ukr: 'Україна', rus: 'Украина', mne: 'Ukrajina', srb: 'Ukrajina', bos: 'Ukrajina', eng: 'Ukraine' },
+  },
+];
 
 // Mock product data — fallback when backend unavailable
 const MOCK_PRODUCTS = [
@@ -50,6 +72,7 @@ const TRANSLATIONS: Record<Lang, {
   searchBtn: string; nav: string[]; tableTitle: string; tableSub: string;
   product: string; cheapest: string; updated: string; refresh: string; refreshing: string;
   noResults: string;
+  noData: string;
 }> = {
   rus: {
     kicker: 'Цены в реальном времени',
@@ -66,6 +89,7 @@ const TRANSLATIONS: Record<Lang, {
     refresh: 'Обновить цены',
     refreshing: 'Обновляем…',
     noResults: 'Ничего не найдено по запросу',
+    noData: 'Пока нет данных по этой стране — скоро появятся',
   },
   ukr: {
     kicker: 'Ціни в реальному часі',
@@ -82,6 +106,7 @@ const TRANSLATIONS: Record<Lang, {
     refresh: 'Оновити ціни',
     refreshing: 'Оновлюємо…',
     noResults: 'Нічого не знайдено за запитом',
+    noData: 'Поки немає даних по цій країні — скоро зʼявляться',
   },
   eng: {
     kicker: 'Real-time prices',
@@ -98,6 +123,7 @@ const TRANSLATIONS: Record<Lang, {
     refresh: 'Refresh prices',
     refreshing: 'Refreshing…',
     noResults: 'No products found for',
+    noData: 'No data for this country yet — coming soon',
   },
   mne: {
     kicker: 'Cijene u realnom vremenu',
@@ -114,6 +140,7 @@ const TRANSLATIONS: Record<Lang, {
     refresh: 'Osvježi cijene',
     refreshing: 'Osvježavamo…',
     noResults: 'Nema rezultata za',
+    noData: 'Još nema podataka za ovu zemlju — uskoro stižu',
   },
   srb: {
     kicker: 'Cene u realnom vremenu',
@@ -130,6 +157,7 @@ const TRANSLATIONS: Record<Lang, {
     refresh: 'Osveži cene',
     refreshing: 'Osvežavamo…',
     noResults: 'Nema rezultata za',
+    noData: 'Još nema podataka za ovu zemlju — uskoro stižu',
   },
   bos: {
     kicker: 'Cijene u realnom vremenu',
@@ -146,6 +174,7 @@ const TRANSLATIONS: Record<Lang, {
     refresh: 'Osvježi cijene',
     refreshing: 'Osvježavamo…',
     noResults: 'Nema rezultata za',
+    noData: 'Još nema podataka za ovu zemlju — uskoro stižu',
   },
 };
 
@@ -155,6 +184,9 @@ const KOTOR_URL =
 function VariationA({
   lang,
   setLang,
+  country,
+  setCountry,
+  countries,
   t,
   onProductsClick,
   onStoresClick,
@@ -173,6 +205,9 @@ function VariationA({
 }: {
   lang: Lang;
   setLang: (lang: Lang) => void;
+  country: Country;
+  setCountry: (country: Country) => void;
+  countries: CountryOption[];
   t: any;
   onProductsClick: () => void;
   onStoresClick: () => void;
@@ -327,6 +362,27 @@ function VariationA({
           >
             {currentUser ? currentUser.email[0].toUpperCase() : '👤'}
           </button>
+          <select
+            value={country}
+            onChange={(e) => setCountry(e.target.value as Country)}
+            aria-label="Country"
+            className="px-2 py-1.5 min-[400px]:px-3"
+            style={{
+              border: '1px solid #d0d9d5',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: '700',
+              backgroundColor: 'white',
+              color: '#0f3d2e',
+              cursor: 'pointer',
+            }}
+          >
+            {countries.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.flag} {c.name[lang]}
+              </option>
+            ))}
+          </select>
           <select
             value={lang}
             onChange={(e) => setLang(e.target.value as Lang)}
@@ -547,6 +603,18 @@ function VariationA({
             >
               {t.noResults} &laquo;{searchQuery.trim()}&raquo;
             </div>
+          ) : !searchQuery.trim() && products.length === 0 ? (
+            <div
+              style={{
+                background: 'white',
+                borderRadius: '18px',
+                padding: '24px',
+                textAlign: 'center',
+                color: '#999',
+              }}
+            >
+              {t.noData}
+            </div>
           ) : (
             <>
               <PriceMatrixLanding
@@ -595,6 +663,29 @@ export function LandingPageDesignBrief() {
     },
     [pathname, router]
   );
+  // Country selector - not part of the URL (unlike lang), just a per-browser
+  // preference persisted in localStorage. Defaults to Montenegro (ME): the
+  // only country with real data so far.
+  const [country, setCountryState] = useState<Country>('ME');
+  useEffect(() => {
+    const saved = window.localStorage.getItem(COUNTRY_STORAGE_KEY);
+    if (saved === 'ME' || saved === 'UA') setCountryState(saved);
+  }, []);
+  const setCountry = useCallback((c: Country) => {
+    setCountryState(c);
+    window.localStorage.setItem(COUNTRY_STORAGE_KEY, c);
+  }, []);
+
+  const [countries, setCountries] = useState<CountryOption[]>(FALLBACK_COUNTRIES);
+  useEffect(() => {
+    countriesAPI
+      .list()
+      .then((res) => {
+        if (res.data.countries?.length > 0) setCountries(res.data.countries);
+      })
+      .catch((err) => console.warn('Failed to load countries, using fallback:', err));
+  }, []);
+
   const [isProductsOpen, setIsProductsOpen] = useState(false);
   const [isStoresOpen, setIsStoresOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -630,8 +721,8 @@ export function LandingPageDesignBrief() {
 
         try {
           const response = isManualRefresh
-            ? await productsAPI.priceMatrixLive(lang)
-            : await productsAPI.matrixCached(lang);
+            ? await productsAPI.priceMatrixLive(lang, country)
+            : await productsAPI.matrixCached(lang, country);
           const data = response.data;
 
           if (data && data.stores && data.products) {
@@ -654,7 +745,7 @@ export function LandingPageDesignBrief() {
         }
 
         // Fallback to old endpoint if the primary call fails
-        const response = await productsAPI.priceMatrix(lang);
+        const response = await productsAPI.priceMatrix(lang, country);
         const data = response.data;
 
         if (data && data.stores && data.products) {
@@ -675,11 +766,10 @@ export function LandingPageDesignBrief() {
         setBusy(false);
       }
     },
-    [lang]
+    [lang, country]
   );
 
-  // Re-fetches whenever the URL locale changes so product names resolve
-  // through the new language's `name_i18n` field (Phase 4.6).
+  // Re-fetches whenever the URL locale or selected country changes.
   useEffect(() => {
     fetchMatrix();
   }, [fetchMatrix]);
@@ -717,6 +807,9 @@ export function LandingPageDesignBrief() {
       <VariationA
         lang={lang}
         setLang={setLang}
+        country={country}
+        setCountry={setCountry}
+        countries={countries}
         t={t}
         onProductsClick={onProductsClick}
         onStoresClick={onStoresClick}
@@ -742,7 +835,7 @@ export function LandingPageDesignBrief() {
         lang={lang}
         currentUser={currentUser}
       />
-      <StoresModal isOpen={isStoresOpen} onClose={() => setIsStoresOpen(false)} lang={lang} />
+      <StoresModal isOpen={isStoresOpen} onClose={() => setIsStoresOpen(false)} lang={lang} country={country} />
       <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} lang={lang} />
       <AuthModal
         isOpen={isAuthModalOpen}
