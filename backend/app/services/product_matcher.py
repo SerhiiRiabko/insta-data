@@ -27,6 +27,22 @@ class ProductMatcherService:
         'pcs': 'pcs', 'шт': 'pcs', 'штук': 'pcs',
     }
 
+    # Ukrainian grocery synonyms - different stores genuinely use different
+    # words for the same generic item (confirmed by browsing live category
+    # pages: АТБ/Фора say "томат(и)", Novus/Varus say "помідор", Сільпо says
+    # "томат"; АТБ/Varus/Сільпо all carry "лосось" AND "сьомга" as if
+    # distinct). Matching is name-equality-based (see _generate_canonical_key
+    # below), so without this, the exact same vegetable/fish silently never
+    # matched across stores just because of which word a given retailer's
+    # copywriter happened to use. Normalizes every form to ONE canonical word
+    # (arbitrary pick - not "the correct" term) before matching; each pattern
+    # is matched by root, not exact word, to cover Ukrainian case endings
+    # (помідор/помідори/помідора/...).
+    NAME_SYNONYMS = [
+        (re.compile(r'помідор\w*', re.IGNORECASE), 'томат'),
+        (re.compile(r'сьомг\w*', re.IGNORECASE), 'лосось'),
+    ]
+
     # Common brands/prefixes to extract
     BRAND_PATTERNS = {
         r'\b(kiš|киш)\b': 'Kiš',
@@ -132,7 +148,7 @@ class ProductMatcherService:
         category = product.get('category', 'Other').lower()
 
         # Extract canonical name and unit
-        canonical_name, unit = self._extract_name_and_unit(name)
+        canonical_name, unit = self._extract_name_and_unit(self._apply_synonyms(name))
 
         # Generate canonical key for grouping
         canonical_key = self._generate_canonical_key(canonical_name, category)
@@ -167,6 +183,13 @@ class ProductMatcherService:
         r'\s*,?\s*(за\s+)?\d*[.,]?\d*\s*(кг|г|л|мл|шт|уп|пак|пач)\.?\s*$',
         re.IGNORECASE,
     )
+
+    def _apply_synonyms(self, name: str) -> str:
+        """Replace known Ukrainian synonym words (see NAME_SYNONYMS) with one
+        canonical form, root-based so case endings don't matter."""
+        for pattern, canonical in self.NAME_SYNONYMS:
+            name = pattern.sub(canonical, name)
+        return name
 
     def _extract_name_and_unit(self, name: str) -> Tuple[str, str]:
         """
