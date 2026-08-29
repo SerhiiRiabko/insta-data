@@ -166,7 +166,15 @@ export interface CategoryGroup<T> {
   rows: T[];
 }
 
-export function groupByCategory<T extends { category?: string | null }>(
+// How many stores actually have a price for this row - used to float real
+// multi-store comparisons to the top of each category instead of leaving
+// them buried among (usually far more numerous) single-store rows, where
+// most products from independently-scraped retailers simply don't overlap.
+function matchCount(row: { prices?: (number | null)[] }): number {
+  return row.prices ? row.prices.filter((p) => p !== null).length : 0;
+}
+
+export function groupByCategory<T extends { category?: string | null; prices?: (number | null)[] }>(
   list: T[],
   otherLabel: string
 ): CategoryGroup<T>[] {
@@ -177,7 +185,12 @@ export function groupByCategory<T extends { category?: string | null }>(
     buckets.get(key)!.push(row);
   }
   return Array.from(buckets.entries())
-    .map(([name, rows]) => ({ name, rows }))
+    .map(([name, rows]) => ({
+      name,
+      // Array.prototype.sort is stable (ES2019+), so ties (e.g. two rows
+      // both single-store) keep their original relative order.
+      rows: [...rows].sort((a, b) => matchCount(b) - matchCount(a)),
+    }))
     .sort((a, b) => {
       const ai = CATEGORY_ORDER.indexOf(a.name);
       const bi = CATEGORY_ORDER.indexOf(b.name);
