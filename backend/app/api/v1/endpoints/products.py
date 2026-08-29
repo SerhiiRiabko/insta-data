@@ -358,6 +358,7 @@ async def _persist_live_products(products: List[dict], country: str = "ME") -> N
             "name": product["name"],
             "unit": product["unit"],
             "prices": product["prices"],
+            "promo": product.get("promo"),
             "image_url": product.get("image_url"),
             "min_price": product.get("min_price"),
             "cheapest_store": product.get("cheapest_store"),
@@ -409,21 +410,21 @@ async def _persist_live_products_background(products: List[dict], country: str =
         logger.warning(f"Failed to persist live matrix to MongoDB: {e}")
 
 
-async def _scrape_and_group_live() -> tuple[list, list]:
+async def _scrape_and_group_live(country: str = "ME") -> tuple[list, list]:
     """
-    Run all registered scrapers (currently cijene.me + the Instagram mock) and
-    fuzzy-group the results across stores. Shared by /matrix-live and
-    /by-category so both endpoints scrape once each, with identical grouping.
+    Run all registered scrapers for one country and fuzzy-group the results
+    across stores. Shared by /matrix-live and /by-category so both endpoints
+    scrape once each, with identical grouping.
 
     Returns (grouped, all_products) - grouped is ProductMatcherService's
-    per-product-group list (each with prices_by_store/category/etc.),
+    per-product-group list (each with prices_by_store/promo_by_store/etc.),
     all_products is the flat pre-grouping list (used only for counting).
     """
     from app.services.scrapers.orchestrator import ScraperOrchestrator
     from app.services.product_matcher import ProductMatcherService
 
     orchestrator = ScraperOrchestrator()
-    orch_result = await orchestrator.run_all()
+    orch_result = await orchestrator.run_all(country=country)
 
     if orch_result.get("status") == "failed":
         return [], []
@@ -442,6 +443,7 @@ async def _scrape_and_group_live() -> tuple[list, list]:
                     "category": product.get("category", "Other"),
                     "image_url": product.get("image_url"),
                     "current_prices": {vendor: product.get("price", 0)},
+                    "is_promo": product.get("is_promo", False),
                 })
 
     matcher = ProductMatcherService(fuzzy_threshold=85)
@@ -457,7 +459,9 @@ def _build_product_row(group: dict, stores: List[dict], lang: str = "ukr") -> di
     to `canonical_name` here until the group has gone through /matrix-cached
     and been translated (admin-triggered or lazy background translation)."""
     prices_by_store = group.get("prices_by_store", {})
+    promo_by_store = group.get("promo_by_store", {})
     prices = [prices_by_store.get(store["name"].lower()) for store in stores]
+    promo = [bool(promo_by_store.get(store["name"].lower())) for store in stores]
     min_price, cheapest_idx = calculate_cheapest(prices)
     image_url = next(
         (p.get("image_url") for p in group.get("products", []) if p.get("image_url")),
@@ -468,6 +472,7 @@ def _build_product_row(group: dict, stores: List[dict], lang: str = "ukr") -> di
         "name": resolve_display_name({"name": group["canonical_name"]}, lang),
         "unit": group["unit"],
         "prices": prices,
+        "promo": promo,
         "min_price": min_price,
         "cheapest_store": stores[cheapest_idx]["name"] if cheapest_idx >= 0 else None,
         "image_url": image_url,
@@ -481,13 +486,9 @@ async def get_price_matrix_live(
     country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
 ):
     stores = await get_stores_for_country(country)
-    if country != "ME":
-        # No scraper pipeline exists yet for this country - see /by-category
-        # docstring for why this can't just run the Montenegro cijene.me scrape.
-        return {"stores": stores, "products": [], "groups": [], "total_groups": 0, "total_products": 0}
     try:
-        logger.info("Running live scraper orchestrator with product matching...")
-        grouped, all_products = await _scrape_and_group_live()
+        logger.info(f"Running live scraper orchestrator (country={country}) with product matching...")
+        grouped, all_products = await _scrape_and_group_live(country)
 
         if not grouped and not all_products:
             return {"stores": stores, "products": [], "groups": [], "total_groups": 0, "total_products": 0}
@@ -516,25 +517,18 @@ async def get_products_by_category(
     country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
 ):
     """
-    Same live cijene.me + Instagram scrape as /matrix-live, but grouped into
-    product-group buckets (Овочі, Фрукти, Молочка, Бакалія, Дитячі товари...)
-    instead of a flat list - see app/services/category_map.py for the
-    cijene.me-category -> Ukrainian-label mapping.
-
-    Montenegro-only for now: cijene.me is the only real scraper pipeline;
-    Ukraine has no scraper yet (per-store, not an aggregator - see the
-    "Shop Price Online" project plan), so `country=UA` just returns the
-    (empty) Ukraine store list with no products, same shape either way.
+    Same live scrape as /matrix-live (cijene.me for ME, АТБ/Сільпо/Varus for
+    UA), but grouped into product-group buckets (Овочі, Фрукти, Молочка,
+    Бакалія, Дитячі товари...) instead of a flat list - see
+    app/services/category_map.py for the category -> Ukrainian-label mapping.
     """
     from app.services.category_map import category_sort_key
 
     stores = await get_stores_for_country(country)
-    if country != "ME":
-        return {"stores": stores, "categories": [], "total_products": 0}
 
     try:
-        logger.info("Running live scraper orchestrator for category grouping...")
-        grouped, all_products = await _scrape_and_group_live()
+        logger.info(f"Running live scraper orchestrator (country={country}) for category grouping...")
+        grouped, all_products = await _scrape_and_group_live(country)
 
         if not grouped and not all_products:
             return {"stores": stores, "categories": [], "total_products": 0}
@@ -613,6 +607,7 @@ async def get_price_matrix_cached(
             "name": resolve_display_name(d, lang),
             "unit": d["unit"],
             "prices": d["prices"],
+            "promo": d.get("promo"),
             "min_price": d.get("min_price"),
             "cheapest_store": d.get("cheapest_store"),
             "image_url": d.get("image_url"),

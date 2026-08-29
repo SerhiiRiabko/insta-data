@@ -52,8 +52,21 @@ FRUIT_KEYWORDS = [
 
 def classify_group_category(raw_category: Optional[str], product_name: str) -> str:
     """
-    Turn a cijene.me category (e.g. "Voće i povrće") plus a product name into
-    one of our Ukrainian product-group labels (e.g. "Овочі", "Фрукти").
+    Turn a scraper-supplied category into one of our Ukrainian product-group
+    labels (e.g. "Овочі", "Фрукти").
+
+    Montenegro's cijene.me categories come in Serbian/Montenegrin and get
+    mapped below via CIJENE_CATEGORY_LABELS. The Ukrainian scrapers
+    (АТБ/Сільпо/Varus) already assign our own Ukrainian labels directly (see
+    e.g. atb_scraper.py CATEGORIES) - anything that isn't a recognized
+    Montenegrin category key passes straight through instead of collapsing
+    into "Інше", which used to happen to every single Ukrainian category.
+
+    Note: by the time this runs, ProductMatcherService has already
+    lowercased+title-cased the raw category - Python's str.title()
+    capitalizes every letter after an apostrophe too (м'ясо -> М'Ясо, not
+    М'ясо), which is why category labels containing "'" (М'ясо) look odd in
+    CATEGORY_ORDER below; that's the actual value that arrives here.
     """
     if not raw_category:
         return "Інше"
@@ -68,7 +81,10 @@ def classify_group_category(raw_category: Optional[str], product_name: str) -> s
             return "Фрукти"
         return "Фрукти та овочі"  # couldn't tell which - keep combined rather than guess
 
-    return CIJENE_CATEGORY_LABELS.get(key, "Інше")
+    if key in CIJENE_CATEGORY_LABELS:
+        return CIJENE_CATEGORY_LABELS[key]
+
+    return raw_category.strip()
 
 
 # Display order for the grouped response - matches the numbering the product
@@ -78,6 +94,8 @@ CATEGORY_ORDER = [
     "Фрукти",
     "Фрукти та овочі",
     "Молочка",
+    "Сири",
+    "Хлібобулочні вироби",
     "Бакалія",
     "Дитячі товари",
     "М'ясо і риба",

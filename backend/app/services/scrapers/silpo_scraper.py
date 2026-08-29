@@ -1,0 +1,157 @@
+"""
+Silpo scraper (silpo.ua) - Ukraine.
+
+Server-rendered (Angular Universal - `_ngcontent-serverapp-*` markers in the
+DOM) - but a plain aiohttp GET gets HTTP 403 even with realistic
+Accept/Accept-Language headers, while a real Playwright-driven browser loads
+the page fine every time. Most likely a TLS/JA3 fingerprint check rather than
+a header check (no Cloudflare interstitial page is shown, unlike АТБ) -
+either way, Playwright is what actually works, so that's what this uses.
+
+Each product card's link has a rich, human-readable `aria-label` with all the
+pricing info baked in - two formats observed:
+  - On promo:    "<name>, <weight>, стара ціна <old> гривень, знижка <pct>%, нова ціна <new> гривень"
+  - Regular:     "<name>; <weight>; <price> грн"
+Parsing the aria-label is simpler and more robust than reverse-engineering
+Silpo's internal `sf-ecom-api.silpo.ua` branch-scoped JSON API, which returns
+category metadata but not a confirmed product-listing shape.
+"""
+
+import logging
+import re
+from typing import List, Optional
+
+from app.services.base_scraper import BaseScraper, ScrapedProduct
+
+logger = logging.getLogger(__name__)
+
+CATEGORIES = [
+    ("ovochi-4808", "Овочі"),
+    ("frukty-4791", "Фрукти"),
+    ("moloko-vershky-237", "Молочка"),
+    ("yogurty-deserty-235", "Молочка"),
+    ("syry-1468", "Сири"),
+    ("m-iaso-4411", "М'ясо і риба"),
+    ("ryba-4430", "М'ясо і риба"),
+    ("khlibobulochni-vyroby-5122", "Хлібобулочні вироби"),
+    ("napoi-52", "Напої"),
+    ("solodoshchi-498", "Солодощі та снеки"),
+]
+
+# "Ім'я, 500г, стара ціна 199 гривень, знижка 30%, нова ціна 139.3 гривень"
+PROMO_RE = re.compile(
+    r"^(?P<name>.+?),\s*(?P<weight>[^,]+),\s*"
+    r"стара ціна\s+(?P<old>[\d.,]+)\s*гривень?,\s*"
+    r"знижка\s+\d+%,\s*"
+    r"нова ціна\s+(?P<new>[\d.,]+)\s*гривень?$",
+    re.IGNORECASE,
+)
+# "Ім'я; 500г; 61.49 грн"
+REGULAR_RE = re.compile(
+    r"^(?P<name>.+?);\s*(?P<weight>[^;]+);\s*(?P<price>[\d.,]+)\s*грн\.?$",
+    re.IGNORECASE,
+)
+
+
+class SilpoScraper(BaseScraper):
+    """Scrapes real grocery prices from silpo.ua (Ukraine)."""
+
+    def __init__(self, category_limit: Optional[int] = None):
+        super().__init__(
+            name="Сільпо",
+            base_url="https://silpo.ua",
+            max_retries=2,
+            timeout=25,
+        )
+        self.categories = CATEGORIES[:category_limit] if category_limit else CATEGORIES
+
+    async def scrape_with_beautifulsoup(self) -> List[ScrapedProduct]:
+        return []  # Blocked (HTTP 403) - see module docstring.
+
+    async def scrape_with_playwright(self) -> List[ScrapedProduct]:
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            logger.warning(f"[{self.name}] Playwright not installed, skipping")
+            return []
+
+        results: List[ScrapedProduct] = []
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                )
+                for slug, category in self.categories:
+                    url = f"{self.base_url}/category/{slug}"
+                    try:
+                        await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                        await page.wait_for_selector("a.product-card__link[aria-label]", timeout=15000)
+                        labels = await page.eval_on_selector_all(
+                            "a.product-card__link[aria-label]",
+                            """
+                            (elements) => elements.map(el => ({
+                                label: el.getAttribute('aria-label'),
+                                href: el.getAttribute('href'),
+                                img: el.querySelector('img') ? el.querySelector('img').getAttribute('src') : null,
+                            }))
+                            """,
+                        )
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] Failed to load {url}: {e}")
+                        continue
+
+                    for item in labels:
+                        product = self._parse_item(item, category)
+                        if product:
+                            results.append(product)
+                    logger.info(f"[{self.name}] {slug}: {len(labels)} raw items")
+            finally:
+                await browser.close()
+
+        logger.info(f"[{self.name}] Playwright: {len(results)} products across {len(self.categories)} categories")
+        return results
+
+    def _parse_item(self, item: dict, category: str) -> Optional[ScrapedProduct]:
+        label = (item.get("label") or "").strip()
+        if not label:
+            return None
+
+        match = PROMO_RE.match(label)
+        if match:
+            try:
+                price = float(match.group("new").replace(",", "."))
+                old_price = float(match.group("old").replace(",", "."))
+            except ValueError:
+                return None
+            name = match.group("name").strip()
+            weight = match.group("weight").strip()
+        else:
+            match = REGULAR_RE.match(label)
+            if not match:
+                return None
+            try:
+                price = float(match.group("price").replace(",", "."))
+            except ValueError:
+                return None
+            old_price = None
+            name = match.group("name").strip()
+            weight = match.group("weight").strip()
+
+        href = item.get("href") or ""
+        url = href if href.startswith("http") else f"{self.base_url}{href}"
+        image_url = item.get("img")
+
+        return ScrapedProduct(
+            name=name,
+            price=price,
+            old_price=old_price,
+            url=url,
+            source="Сільпо",
+            category=category,
+            image_url=image_url,
+            unit=weight,
+        )

@@ -28,6 +28,7 @@ import {
   type MatrixProduct as Product,
   type MatrixStore as Store,
   type Lang,
+  type Country,
   translations,
   formatPrice,
   groupByCategory,
@@ -38,6 +39,7 @@ interface PriceMatrixProps {
   products: Product[];
   stores: Store[];
   lang: Lang;
+  country?: Country;
   accent?: string;
   onRefreshPrices?: () => void;
   refreshing?: boolean;
@@ -47,6 +49,7 @@ export function PriceMatrixLanding({
   products,
   stores,
   lang = 'ukr',
+  country = 'ME',
   accent = '#0b6e4f',
   onRefreshPrices,
   refreshing = false,
@@ -298,11 +301,13 @@ export function PriceMatrixLanding({
                 {/* Price Cells */}
                 {product.prices.map((price, colIdx) => {
                   const isCheapest = colIdx === product.cheapestIndex && price !== null;
+                  const isPromo = !!product.promo?.[colIdx] && price !== null;
                   const isUnavailable = price === null;
 
                   return (
                     <td
                       key={colIdx}
+                      title={isPromo ? t.promo : undefined}
                       style={{
                         textAlign: 'right',
                         paddingLeft: '10px',
@@ -313,14 +318,19 @@ export function PriceMatrixLanding({
                         fontWeight: isCheapest ? '700' : '600',
                         fontFamily: 'Space Grotesk, monospace',
                         fontVariantNumeric: 'tabular-nums',
-                        color: isUnavailable ? '#ccc' : isCheapest ? '#05603a' : '#52736a',
-                        backgroundColor: isCheapest ? '#d8f3e3' : 'white',
+                        color: isUnavailable ? '#ccc' : isCheapest ? '#05603a' : isPromo ? '#0b6e4f' : '#52736a',
+                        backgroundColor: isCheapest ? '#d8f3e3' : isPromo ? '#eafaf1' : 'white',
                         borderRight: '1px solid #eef4f1',
                         borderLeft: isCheapest ? `3px solid ${accent}` : 'none',
                         width: '16%',
                       }}
                     >
-                      {isUnavailable ? '—' : formatPrice(price, lang)}
+                      {isUnavailable ? '—' : formatPrice(price, lang, country)}
+                      {isPromo && !isCheapest && (
+                        <span style={{ marginLeft: '4px', fontSize: '10px' }} aria-hidden="true">
+                          %
+                        </span>
+                      )}
                     </td>
                   );
                 })}
@@ -341,7 +351,7 @@ export function PriceMatrixLanding({
                   {product.minPrice !== null ? (
                     <div>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: accent, fontFamily: 'Space Grotesk, monospace' }}>
-                        {formatPrice(product.minPrice, lang)}
+                        {formatPrice(product.minPrice, lang, country)}
                       </div>
                       <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#7a8e8a', fontWeight: 'bold', marginTop: '4px' }}>
                         {product.cheapestStoreName}

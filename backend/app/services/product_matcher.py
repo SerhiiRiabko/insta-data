@@ -90,6 +90,7 @@ class ProductMatcherService:
                     'unit': product['unit'],
                     'products': [],
                     'prices_by_store': {},
+                    'promo_by_store': {},
                 }
 
             groups[canonical_key]['products'].append(product)
@@ -100,8 +101,10 @@ class ProductMatcherService:
                 if isinstance(prices, dict):
                     for store, price in prices.items():
                         groups[canonical_key]['prices_by_store'][store] = price
+                        groups[canonical_key]['promo_by_store'][store] = bool(product.get('is_promo'))
                 elif isinstance(prices, (int, float)):
                     groups[canonical_key]['prices_by_store'][product['source']] = prices
+                    groups[canonical_key]['promo_by_store'][product['source']] = bool(product.get('is_promo'))
 
         # Calculate aggregates for each group
         result = []
@@ -144,7 +147,11 @@ class ProductMatcherService:
             'canonical_name': canonical_name,
             'canonical_key': canonical_key,
             'unit': unit,
-            'category': category.title(),
+            # Capitalize only the first character, not str.title(): title()
+            # capitalizes every letter after a non-letter too, which mangles
+            # categories with an apostrophe ("м'ясо" -> "М'Ясо" instead of
+            # "М'ясо").
+            'category': category[:1].upper() + category[1:] if category else category,
             'source': source,
         }
 

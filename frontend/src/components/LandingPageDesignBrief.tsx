@@ -621,6 +621,7 @@ function VariationA({
                 products={products}
                 stores={stores}
                 lang={lang}
+                country={country}
                 accent="#0b6e4f"
                 onRefreshPrices={onRefreshPrices}
                 refreshing={refreshing}
@@ -629,6 +630,7 @@ function VariationA({
                 products={products}
                 stores={stores}
                 lang={lang}
+                country={country}
                 accent="#0b6e4f"
                 onRefreshPrices={onRefreshPrices}
                 refreshing={refreshing}
@@ -733,6 +735,7 @@ export function LandingPageDesignBrief() {
                 name: p.name,
                 unit: p.unit,
                 prices: p.prices,
+                promo: p.promo,
                 imageUrl: p.image_url,
                 category: p.category,
               }))

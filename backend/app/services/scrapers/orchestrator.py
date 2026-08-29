@@ -22,6 +22,10 @@ class ScraperOrchestrator:
 
     def __init__(self):
         self.scrapers = {}
+        # Which country each registered scraper's data belongs to - lets
+        # run_all(country=...) run only the scrapers relevant to one country
+        # instead of e.g. re-scraping Montenegro when the UA tab refreshes.
+        self.scraper_country = {}
         self._register_scrapers()
 
     def _register_scrapers(self):
@@ -31,20 +35,51 @@ class ScraperOrchestrator:
             # Real data source: one scraper covers Aroma/Voli/HDL/IDEA at once,
             # since cijene.me already aggregates all 4 chains' prices per product.
             self.scrapers["cijene"] = CijeneScraper()
+            self.scraper_country["cijene"] = "ME"
         except Exception as e:
             logger.error(f"Failed to load Cijene.me scraper: {e}")
 
         try:
             from app.services.scrapers.instagram_mock_scraper import InstagramMockScraper
             self.scrapers["instagram"] = InstagramMockScraper()
+            self.scraper_country["instagram"] = "ME"
         except Exception as e:
             logger.error(f"Failed to load Instagram scraper: {e}")
 
+        # АТБ scraper (atb_scraper.py) intentionally NOT registered: its site
+        # sits behind a Cloudflare managed challenge that blocks Playwright
+        # automation outright - confirmed with navigator.webdriver patched,
+        # headed mode, AND the real installed Chrome via channel="chrome",
+        # none of which cleared the challenge even after 18s. This needs a
+        # dedicated stealth/anti-detect solution (e.g. playwright-stealth or
+        # a paid unlocker API), which is a separate, bigger piece of work -
+        # left disabled rather than burning ~20s/category on every scrape
+        # for nothing. The scraper code itself is ready to register once a
+        # working bypass exists.
+
+        try:
+            from app.services.scrapers.silpo_scraper import SilpoScraper
+            self.scrapers["silpo"] = SilpoScraper()
+            self.scraper_country["silpo"] = "UA"
+        except Exception as e:
+            logger.error(f"Failed to load Сільпо scraper: {e}")
+
+        try:
+            from app.services.scrapers.varus_scraper import VarusScraper
+            self.scrapers["varus"] = VarusScraper()
+            self.scraper_country["varus"] = "UA"
+        except Exception as e:
+            logger.error(f"Failed to load Varus scraper: {e}")
+
         logger.info(f"Registered {len(self.scrapers)} scrapers: {list(self.scrapers.keys())}")
 
-    async def run_all(self) -> Dict[str, Any]:
+    async def run_all(self, country: Optional[str] = None) -> Dict[str, Any]:
         """
-        Run all scrapers in parallel.
+        Run all scrapers in parallel (optionally scoped to one country's).
+
+        Args:
+            country: "ME" or "UA" - if given, only scrapers tagged for that
+                country run (see scraper_country). None runs everything.
 
         Returns:
         {
@@ -59,15 +94,21 @@ class ScraperOrchestrator:
             "errors": []
         }
         """
-        logger.info("Starting orchestrated scraping for all stores...")
+        logger.info(f"Starting orchestrated scraping (country={country or 'all'})...")
 
         import time
         start_time = time.time()
 
-        # Create tasks for all scrapers
+        scrapers = (
+            self.scrapers
+            if country is None
+            else {k: v for k, v in self.scrapers.items() if self.scraper_country.get(k) == country}
+        )
+
+        # Create tasks for the selected scrapers
         tasks = {
             store_name: self._scrape_store(store_name, scraper)
-            for store_name, scraper in self.scrapers.items()
+            for store_name, scraper in scrapers.items()
         }
 
         # Run in parallel
@@ -157,6 +198,9 @@ class ScraperOrchestrator:
                 all_prods.append({
                     "name": p.name,
                     "price": p.price,
+                    "old_price": p.old_price,
+                    "is_promo": p.is_promo,
+                    "unit": p.unit,
                     "source": p.source,
                     "category": p.category,
                     "image_url": p.image_url,

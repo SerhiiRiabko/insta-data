@@ -52,15 +52,19 @@ export const productsAPI = {
     api.get('/products/matrix-cached', { params: { lang, country } }),
 
   // Manual "Оновити ціни" trigger + the weekly scheduled job on the backend
-  // both hit the real cijene.me scrape (~10-15s), hence the longer timeout.
-  // Montenegro-only pipeline for now - see backend products.py docstrings.
+  // both hit a real scrape: cijene.me's JSON API for ME (~10-15s), but the
+  // UA pipeline (АТБ/Сільпо/Varus) drives real Playwright browsers across
+  // ~10 categories per store with no shared aggregator, which is much
+  // slower (~90-120s) - timeout sized for the slower of the two so a UA
+  // refresh doesn't get cut off client-side while the scrape (and its
+  // background persist) keeps running server-side regardless.
   priceMatrixLive: (lang: Lang = 'ukr', country: Country = 'ME') =>
-    api.get('/products/matrix-live', { params: { lang, country }, timeout: 30000 }),
+    api.get('/products/matrix-live', { params: { lang, country }, timeout: 150000 }),
 
   // Same live scrape as priceMatrixLive, grouped into product-group
   // categories (Овочі, Фрукти, Молочка, Бакалія...) instead of a flat list.
   byCategory: (lang: Lang = 'ukr', country: Country = 'ME') =>
-    api.get('/products/by-category', { params: { lang, country }, timeout: 30000 }),
+    api.get('/products/by-category', { params: { lang, country }, timeout: 150000 }),
 
   list: (limit: number = 50, skip: number = 0, lang: Lang = 'ukr') =>
     api.get('/products/list', { params: { limit, skip, lang } }),

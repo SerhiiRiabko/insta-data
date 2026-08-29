@@ -39,6 +39,9 @@ export interface MatrixProduct {
   name: string;
   unit: string;
   prices: (number | null)[];
+  // Per-store discount flag, aligned to `prices` - a cell is highlighted
+  // as a promo regardless of whether it's also the cheapest store.
+  promo?: boolean[];
   imageUrl?: string | null;
   category?: string | null;
 }
@@ -68,6 +71,7 @@ export const translations: Record<
     other: string;
     refresh: string;
     refreshing: string;
+    promo: string;
   }
 > = {
   rus: {
@@ -77,6 +81,7 @@ export const translations: Record<
     other: 'Другое',
     refresh: 'Обновить цены',
     refreshing: 'Обновляем…',
+    promo: 'Акційна ціна',
   },
   ukr: {
     product: 'Товар',
@@ -85,6 +90,7 @@ export const translations: Record<
     other: 'Інше',
     refresh: 'Оновити ціни',
     refreshing: 'Оновлюємо…',
+    promo: 'Акційна ціна',
   },
   eng: {
     product: 'Product',
@@ -93,6 +99,7 @@ export const translations: Record<
     other: 'Other',
     refresh: 'Refresh prices',
     refreshing: 'Refreshing…',
+    promo: 'Promo price',
   },
   mne: {
     product: 'Proizvod',
@@ -101,6 +108,7 @@ export const translations: Record<
     other: 'Ostalo',
     refresh: 'Osvježi cijene',
     refreshing: 'Osvježavamo…',
+    promo: 'Akcijska cijena',
   },
   srb: {
     product: 'Proizvod',
@@ -109,6 +117,7 @@ export const translations: Record<
     other: 'Ostalo',
     refresh: 'Osveži cene',
     refreshing: 'Osvežavamo…',
+    promo: 'Akcijska cena',
   },
   bos: {
     product: 'Proizvod',
@@ -117,15 +126,19 @@ export const translations: Record<
     other: 'Ostalo',
     refresh: 'Osvježi cijene',
     refreshing: 'Osvježavamo…',
+    promo: 'Akcijska cijena',
   },
 };
 
-export const formatPrice = (price: number | null, lang: Lang): string => {
+export type Country = 'ME' | 'UA';
+
+export const formatPrice = (price: number | null, lang: Lang, country: Country = 'ME'): string => {
   if (price === null) return '—';
+  const symbol = country === 'UA' ? '₴' : '€';
   if (lang === 'eng') {
-    return `€${price.toFixed(2)}`;
+    return `${symbol}${price.toFixed(2)}`;
   }
-  return `€ ${price.toFixed(2).replace('.', ',')}`;
+  return `${symbol} ${price.toFixed(2).replace('.', ',')}`;
 };
 
 // Matches backend/app/services/category_map.py CATEGORY_ORDER — kept in sync
@@ -135,6 +148,8 @@ export const CATEGORY_ORDER = [
   'Фрукти',
   'Фрукти та овочі',
   'Молочка',
+  'Сири',
+  'Хлібобулочні вироби',
   'Бакалія',
   'Дитячі товари',
   "М'ясо і риба",

@@ -23,6 +23,7 @@ import {
   type MatrixProduct as Product,
   type MatrixStore as Store,
   type Lang,
+  type Country,
   translations,
   formatPrice,
   groupByCategory,
@@ -33,6 +34,7 @@ interface PriceCardsMobileProps {
   products: Product[];
   stores: Store[];
   lang: Lang;
+  country?: Country;
   accent?: string;
   onRefreshPrices?: () => void;
   refreshing?: boolean;
@@ -42,6 +44,7 @@ export function PriceCardsMobile({
   products,
   stores,
   lang = 'ukr',
+  country = 'ME',
   accent = '#0b6e4f',
   onRefreshPrices,
   refreshing = false,
@@ -174,7 +177,7 @@ export function PriceCardsMobile({
                     className="text-base font-bold"
                     style={{ color: accent, fontFamily: 'Space Grotesk, monospace' }}
                   >
-                    {formatPrice(product.minPrice, lang)}
+                    {formatPrice(product.minPrice, lang, country)}
                   </div>
                   <div
                     className="text-[10px] uppercase font-medium mt-0.5"
@@ -190,19 +193,21 @@ export function PriceCardsMobile({
                 {stores.map((store, i) => {
                   const price = product.prices[i];
                   const isCheapest = i === product.cheapestIndex && price !== null;
+                  const isPromo = !!product.promo?.[i] && price !== null;
                   return (
                     <div
                       key={store.name}
                       className="flex-1 text-center py-2 px-1.5 border-r last:border-r-0"
+                      title={isPromo ? t.promo : undefined}
                       style={{
                         borderColor: '#f0f0f0',
-                        backgroundColor: isCheapest ? '#d8f3e3' : 'transparent',
+                        backgroundColor: isCheapest ? '#d8f3e3' : isPromo ? '#eafaf1' : 'transparent',
                         boxShadow: isCheapest ? `inset 0 2px 0 ${accent}` : 'none',
                       }}
                     >
                       <div
                         className="text-[10px] font-semibold mb-0.5"
-                        style={{ color: isCheapest ? '#33524a' : '#7d9a8d' }}
+                        style={{ color: isCheapest ? '#33524a' : isPromo ? '#0b6e4f' : '#7d9a8d' }}
                       >
                         {store.initial}
                       </div>
@@ -211,10 +216,10 @@ export function PriceCardsMobile({
                         style={{
                           fontFamily: 'Space Grotesk, monospace',
                           fontWeight: isCheapest ? 700 : 400,
-                          color: price === null ? '#ccc' : isCheapest ? '#05603a' : '#52736a',
+                          color: price === null ? '#ccc' : isCheapest ? '#05603a' : isPromo ? '#0b6e4f' : '#52736a',
                         }}
                       >
-                        {price === null ? '—' : formatPrice(price, lang)}
+                        {price === null ? '—' : formatPrice(price, lang, country)}
                       </div>
                     </div>
                   );

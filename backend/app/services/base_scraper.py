@@ -32,6 +32,8 @@ class ScrapedProduct:
         category: Optional[str] = None,
         description: Optional[str] = None,
         image_url: Optional[str] = None,
+        old_price: Optional[float] = None,
+        unit: Optional[str] = None,
     ):
         self.name = name.strip()
         self.price = float(price)
@@ -40,6 +42,11 @@ class ScrapedProduct:
         self.category = category
         self.description = description
         self.image_url = image_url
+        # old_price is only set when the store is showing a discount - used
+        # to highlight promo items (is_promo) in the price matrix.
+        self.old_price = float(old_price) if old_price is not None else None
+        self.is_promo = self.old_price is not None and self.old_price > self.price
+        self.unit = unit
         self.dedup_hash = self._generate_hash()
         self.timestamp = datetime.utcnow()
 
@@ -58,6 +65,9 @@ class ScrapedProduct:
             "category": self.category,
             "description": self.description,
             "image_url": self.image_url,
+            "old_price": self.old_price,
+            "is_promo": self.is_promo,
+            "unit": self.unit,
             "dedup_hash": self.dedup_hash,
             "current_prices": {self.source: self.price},
             "min_price": self.price,
