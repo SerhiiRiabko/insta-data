@@ -1,7 +1,7 @@
 /**
  * PriceMatrixLanding — Price Comparison Table Component
  *
- * Розташування: Monte-Shop-Price Variant C (Immersive landing)
+ * Розташування: Shop Price Online Variant C (Immersive landing)
  *
  * Функціональність:
  * - HTML <table> для порівняння цін по 4 магазинам
@@ -231,6 +231,9 @@ export function PriceMatrixLanding({
                     <td
                       colSpan={colSpan}
                       style={{
+                        position: 'sticky',
+                        top: '56px',
+                        zIndex: 1,
                         textAlign: 'left',
                         padding: '10px 16px',
                         fontSize: '12px',

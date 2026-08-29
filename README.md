@@ -1,4 +1,4 @@
-# 🛒 Insta-Data — Price Comparison Platform
+# 🛒 Shop Price Online — Price Comparison Platform
 
 [![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)](.)
 [![Version](https://img.shields.io/badge/Version-1.0.0-blue)](.)

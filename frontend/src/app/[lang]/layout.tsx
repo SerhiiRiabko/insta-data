@@ -10,7 +10,7 @@ import { BCP47_TAG } from '@/lib/productMatrix';
 import '@/app/globals.css';
 
 export const metadata: Metadata = {
-  title: 'Monte-Shop-Price - Real-time Price Comparison',
+  title: 'Shop Price Online - Real-time Price Comparison',
   description: 'Find the best prices for grocery products in Montenegro',
 };
 

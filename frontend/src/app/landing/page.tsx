@@ -6,8 +6,8 @@
 import { LandingPageDesignBrief } from '@/components/LandingPageDesignBrief';
 
 export const metadata = {
-  title: 'Monte-Shop-Price Landing — Design Variations',
-  description: 'Three landing page designs for Monte-Shop-Price price comparison platform',
+  title: 'Shop Price Online Landing — Design Variations',
+  description: 'Three landing page designs for Shop Price Online price comparison platform',
 };
 
 export default function LandingPage() {

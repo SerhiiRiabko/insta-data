@@ -124,7 +124,14 @@ export function PriceCardsMobile({
           {group.name && (
             <div
               className="text-xs font-bold uppercase tracking-wide mb-2 mt-3 px-3 py-2 rounded"
-              style={{ color: '#33524a', backgroundColor: '#eef4f1', letterSpacing: '0.05em' }}
+              style={{
+                color: '#33524a',
+                backgroundColor: '#eef4f1',
+                letterSpacing: '0.05em',
+                position: 'sticky',
+                top: '65px',
+                zIndex: 10,
+              }}
             >
               {group.name} · {group.rows.length}
             </div>

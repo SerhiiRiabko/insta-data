@@ -54,7 +54,7 @@ const TRANSLATIONS: Record<Lang, {
   rus: {
     kicker: 'Цены в реальном времени',
     tagline: 'Сравнение цен на продукты в супермаркетах Черногории',
-    heroLine: 'Monte-Shop-Price',
+    heroLine: 'Shop Price Online',
     searchPlaceholder: 'Поиск товара…',
     searchBtn: 'Найти',
     nav: ['Список покупок', 'Магазины', 'О проекте'],
@@ -70,7 +70,7 @@ const TRANSLATIONS: Record<Lang, {
   ukr: {
     kicker: 'Ціни в реальному часі',
     tagline: 'Порівняння цін на продукти в супермаркетах Чорногорії',
-    heroLine: 'Monte-Shop-Price',
+    heroLine: 'Shop Price Online',
     searchPlaceholder: 'Пошук товару…',
     searchBtn: 'Знайти',
     nav: ['Список покупок', 'Магазини', 'Про проєкт'],
@@ -86,7 +86,7 @@ const TRANSLATIONS: Record<Lang, {
   eng: {
     kicker: 'Real-time prices',
     tagline: 'Real-time grocery price comparison across Montenegro',
-    heroLine: 'Monte-Shop-Price',
+    heroLine: 'Shop Price Online',
     searchPlaceholder: 'Search a product…',
     searchBtn: 'Search',
     nav: ['Shopping List', 'Stores', 'About'],
@@ -102,7 +102,7 @@ const TRANSLATIONS: Record<Lang, {
   mne: {
     kicker: 'Cijene u realnom vremenu',
     tagline: 'Poređenje cijena prehrambenih proizvoda u supermarketima Crne Gore',
-    heroLine: 'Monte-Shop-Price',
+    heroLine: 'Shop Price Online',
     searchPlaceholder: 'Pretraga proizvoda…',
     searchBtn: 'Pretraga',
     nav: ['Lista za kupovinu', 'Prodavnice', 'O projektu'],
@@ -118,7 +118,7 @@ const TRANSLATIONS: Record<Lang, {
   srb: {
     kicker: 'Cene u realnom vremenu',
     tagline: 'Poređenje cena prehrambenih proizvoda u supermarketima Crne Gore',
-    heroLine: 'Monte-Shop-Price',
+    heroLine: 'Shop Price Online',
     searchPlaceholder: 'Pretraga proizvoda…',
     searchBtn: 'Pretraga',
     nav: ['Lista za kupovinu', 'Prodavnice', 'O projektu'],
@@ -134,7 +134,7 @@ const TRANSLATIONS: Record<Lang, {
   bos: {
     kicker: 'Cijene u realnom vremenu',
     tagline: 'Poređenje cijena prehrambenih proizvoda u supermarketima Crne Gore',
-    heroLine: 'Monte-Shop-Price',
+    heroLine: 'Shop Price Online',
     searchPlaceholder: 'Pretraga proizvoda…',
     searchBtn: 'Pretraga',
     nav: ['Lista za kupovinu', 'Prodavnice', 'O projektu'],
@@ -204,7 +204,7 @@ function VariationA({
         {/* Left: Logo — click to go home (scrolls to top, closes any open modal) */}
         <button
           onClick={onHomeClick}
-          aria-label="Monte-Shop-Price — home"
+          aria-label="Shop Price Online — home"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -232,7 +232,7 @@ function VariationA({
             M
           </div>
           <span className="hidden min-[360px]:inline" style={{ fontWeight: '600', fontSize: '16px', color: '#0f3d2e' }}>
-            Monte-Shop-Price
+            Shop Price Online
           </span>
         </button>
 

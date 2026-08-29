@@ -1,5 +1,5 @@
 /**
- * Home Page - Monte-Shop-Price (Phase 1A)
+ * Home Page - Shop Price Online (Phase 1A)
  * Landing page with price comparison table, modals, and language selector
  */
 

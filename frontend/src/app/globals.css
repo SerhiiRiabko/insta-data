@@ -1,5 +1,5 @@
 /**
- * Global Styles — Monte-Shop-Price
+ * Global Styles — Shop Price Online
  */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -36,5 +36,9 @@ html {
 
 body {
   font-feature-settings: "rlig" 1, "calt" 1;
-  overflow-x: hidden;
+  /* No overflow-x here on purpose: html already clips horizontally (line 34).
+     Setting it here too turns body into its own scroll container per the CSS
+     overflow spec, which silently breaks position:sticky for every
+     descendant (the header nav, category group labels) relative to the
+     page/viewport. */
 }
