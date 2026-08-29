@@ -23,11 +23,20 @@ import re
 from typing import List, Optional
 
 from app.services.base_scraper import BaseScraper, ScrapedProduct
+from app.services.category_map import split_ua_produce_category
 
 logger = logging.getLogger(__name__)
 
+# "fruits-and-vegetables" is Novus's own combined category - split per-item
+# by name keyword (see split_ua_produce_category) rather than kept as one
+# "Фрукти та овочі" bucket, so it lines up with Сільпо/Varus/Фора's already
+# -split "Овочі"/"Фрукти" categories. Category is part of the product-
+# matching key (product_matcher.py), so a mismatched category here silently
+# prevented identical produce names from ever matching across stores.
+_PRODUCE_SLUG = "fruits-and-vegetables"
+
 CATEGORIES = [
-    ("fruits-and-vegetables", "Фрукти та овочі"),
+    (_PRODUCE_SLUG, "Фрукти та овочі"),
     ("dairy-and-eggs", "Молочка"),
     ("meat-fish-poultry", "М'ясо і риба"),
     ("bakery", "Хлібобулочні вироби"),
@@ -124,6 +133,9 @@ class NovusScraper(BaseScraper):
 
         href = item.get("href") or ""
         url = href if href.startswith("http") else f"{self.base_url}{href}"
+
+        if category == "Фрукти та овочі":
+            category = split_ua_produce_category(item["name"])
 
         return ScrapedProduct(
             name=item["name"],

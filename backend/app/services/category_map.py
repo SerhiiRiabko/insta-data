@@ -49,6 +49,38 @@ FRUIT_KEYWORDS = [
     "grejpfrut", "nar ",
 ]
 
+# Ukrainian equivalent, used by scrapers whose own site groups produce into
+# one combined "fruits & vegetables" bucket (e.g. Novus's category is
+# literally named that) instead of splitting it like the others do -
+# splitting client-side here keeps the category consistent with
+# Сільпо/Varus/Фора, which is what actually lets cross-store matching work
+# (category is part of the product-matching key - see product_matcher.py).
+VEGETABLE_KEYWORDS_UA = [
+    "помідор", "томат", "огірок", "огірк", "перец", "перец", "цибул",
+    "картопл", "морков", "капуст", "буряк", "часник", "кабачок", "гарбуз",
+    "баклажан", "редис", "селера", "спарж", "кукурудза", "горох", "квасол",
+    "зелен", "петрушк", "кріп", "салат", "шпинат", "броколі", "цвітн",
+]
+
+FRUIT_KEYWORDS_UA = [
+    "яблук", "груш", "банан", "апельсин", "мандарин", "лимон", "грейпфрут",
+    "виноград", "полуниц", "малин", "чорниц", "лохин", "персик", "абрикос",
+    "слив", "кавун", "дин", "ананас", "ківі", "гранат", "інжир", "хурм",
+    "авокадо", "манго", "фрукт",
+]
+
+
+def split_ua_produce_category(name: str, fallback: str = "Фрукти та овочі") -> str:
+    """Classify one Ukrainian produce item as "Овочі" or "Фрукти" by keyword,
+    falling back to the combined label when neither list matches (rather
+    than guessing) - see VEGETABLE_KEYWORDS_UA/FRUIT_KEYWORDS_UA above."""
+    name_lower = name.lower()
+    if any(kw in name_lower for kw in VEGETABLE_KEYWORDS_UA):
+        return "Овочі"
+    if any(kw in name_lower for kw in FRUIT_KEYWORDS_UA):
+        return "Фрукти"
+    return fallback
+
 
 def classify_group_category(raw_category: Optional[str], product_name: str) -> str:
     """

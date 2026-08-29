@@ -155,6 +155,19 @@ class ProductMatcherService:
             'source': source,
         }
 
+    # Trailing Ukrainian weight/volume unit, with or without a leading number
+    # ("Картопля біла, кг" has no number - Fora prices it per kg without
+    # putting the number in the title; "Молоко ... 900 г" does). The ASCII
+    # unit_pattern below never matches Cyrillic letters at all, so without
+    # this, every Ukrainian scraper's name kept its raw unit suffix attached
+    # verbatim - and since two stores rarely format that suffix identically
+    # (", кг" vs "900 г" vs no suffix at all when weight is a separate
+    # field), otherwise-identical product names silently failed to match.
+    CYRILLIC_TRAILING_UNIT_RE = re.compile(
+        r'\s*,?\s*(за\s+)?\d*[.,]?\d*\s*(кг|г|л|мл|шт|уп|пак|пач)\.?\s*$',
+        re.IGNORECASE,
+    )
+
     def _extract_name_and_unit(self, name: str) -> Tuple[str, str]:
         """
         Extract product name and unit from full name string.
@@ -176,7 +189,12 @@ class ProductMatcherService:
 
             # Remove unit from name
             clean_name = re.sub(unit_pattern, '', name, flags=re.IGNORECASE).strip()
+            clean_name = self.CYRILLIC_TRAILING_UNIT_RE.sub('', clean_name).strip()
             return clean_name, f"{number}{unit}"
+
+        clean_name = self.CYRILLIC_TRAILING_UNIT_RE.sub('', name).strip()
+        if clean_name and clean_name != name:
+            return clean_name, "1x"
 
         return name, "1x"
 
