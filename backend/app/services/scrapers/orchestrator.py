@@ -71,6 +71,20 @@ class ScraperOrchestrator:
         except Exception as e:
             logger.error(f"Failed to load Varus scraper: {e}")
 
+        try:
+            from app.services.scrapers.fora_scraper import ForaScraper
+            self.scrapers["fora"] = ForaScraper()
+            self.scraper_country["fora"] = "UA"
+        except Exception as e:
+            logger.error(f"Failed to load Фора scraper: {e}")
+
+        try:
+            from app.services.scrapers.novus_scraper import NovusScraper
+            self.scrapers["novus"] = NovusScraper()
+            self.scraper_country["novus"] = "UA"
+        except Exception as e:
+            logger.error(f"Failed to load Novus scraper: {e}")
+
         logger.info(f"Registered {len(self.scrapers)} scrapers: {list(self.scrapers.keys())}")
 
     async def run_all(self, country: Optional[str] = None) -> Dict[str, Any]:

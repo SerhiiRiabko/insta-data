@@ -1,0 +1,146 @@
+"""
+Novus scraper (novus.zakaz.ua) - Ukraine.
+
+Runs on the zakaz.ua marketplace platform (shared by several Ukrainian
+chains). The platform normally ties pricing/stock to a chosen delivery
+address, but the "Каталог товарів" category pages (/uk/categories/<slug>/)
+render real products with real prices WITHOUT selecting an address first -
+presumably a default/Kyiv catalog. No bot-protection interstitial observed.
+
+React SPA (Next.js-style `jsx-<hash>` class names) - products aren't in the
+raw HTML, so this uses Playwright like Фора/Сільпо/Varus.
+
+Price markup uses explicit `data-marker` attributes rather than fragile
+class names:
+  <div data-marker="Price">
+    <div data-marker="Old Price">...<span class="Price__value_body...">49.79</span></div>  (only when discounted)
+    <div data-marker="Discounted Price">...<span class="Price__value_caption">59.89</span></div>
+  </div>
+"""
+
+import logging
+import re
+from typing import List, Optional
+
+from app.services.base_scraper import BaseScraper, ScrapedProduct
+
+logger = logging.getLogger(__name__)
+
+CATEGORIES = [
+    ("fruits-and-vegetables", "Фрукти та овочі"),
+    ("dairy-and-eggs", "Молочка"),
+    ("meat-fish-poultry", "М'ясо і риба"),
+    ("bakery", "Хлібобулочні вироби"),
+    ("drinks", "Напої"),
+    ("snacks-and-sweets", "Солодощі та снеки"),
+]
+
+PRICE_NUM_RE = re.compile(r"[\d.,]+")
+
+
+class NovusScraper(BaseScraper):
+    """Scrapes real grocery prices from novus.zakaz.ua (Ukraine)."""
+
+    def __init__(self, category_limit: Optional[int] = None):
+        super().__init__(
+            name="Novus",
+            base_url="https://novus.zakaz.ua",
+            max_retries=2,
+            timeout=25,
+        )
+        self.categories = CATEGORIES[:category_limit] if category_limit else CATEGORIES
+
+    async def scrape_with_beautifulsoup(self) -> List[ScrapedProduct]:
+        return []  # CSR - products aren't in the initial HTML, see module docstring.
+
+    async def scrape_with_playwright(self) -> List[ScrapedProduct]:
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            logger.warning(f"[{self.name}] Playwright not installed, skipping")
+            return []
+
+        results: List[ScrapedProduct] = []
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                )
+                for slug, category in self.categories:
+                    url = f"{self.base_url}/uk/categories/{slug}/"
+                    try:
+                        await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                        await page.wait_for_selector(".ProductTile", timeout=15000)
+                        items = await page.eval_on_selector_all(
+                            ".ProductTile",
+                            """
+                            (tiles) => tiles.map(t => {
+                                const title = t.querySelector('.ProductTile__title');
+                                const weight = t.querySelector('.ProductTile__weight');
+                                const oldPrice = t.querySelector('[data-marker="Old Price"] span');
+                                const curPrice = t.querySelector('[data-marker="Discounted Price"] span');
+                                const link = t.closest('a.ProductTileLink') || t.querySelector('a');
+                                const img = t.querySelector('img');
+                                if (!title || !curPrice) return null;
+                                return {
+                                    name: title.textContent.trim(),
+                                    weight: weight ? weight.textContent.trim() : null,
+                                    old: oldPrice ? oldPrice.textContent.trim() : null,
+                                    price: curPrice.textContent.trim(),
+                                    href: link ? link.getAttribute('href') : null,
+                                    img: img ? img.getAttribute('src') : null,
+                                };
+                            })
+                            """,
+                        )
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] Failed to load {url}: {e}")
+                        continue
+
+                    for item in items:
+                        product = self._parse_item(item, category)
+                        if product:
+                            results.append(product)
+                    logger.info(f"[{self.name}] {slug}: {len(items)} raw items")
+            finally:
+                await browser.close()
+
+        logger.info(f"[{self.name}] Playwright: {len(results)} products across {len(self.categories)} categories")
+        return results
+
+    def _parse_item(self, item: Optional[dict], category: str) -> Optional[ScrapedProduct]:
+        if not item or not item.get("name") or not item.get("price"):
+            return None
+
+        price = self._parse_number(item["price"])
+        if price is None:
+            return None
+
+        old_price = self._parse_number(item["old"]) if item.get("old") else None
+
+        href = item.get("href") or ""
+        url = href if href.startswith("http") else f"{self.base_url}{href}"
+
+        return ScrapedProduct(
+            name=item["name"],
+            price=price,
+            old_price=old_price,
+            url=url,
+            source="Novus",
+            category=category,
+            image_url=item.get("img"),
+            unit=item.get("weight"),
+        )
+
+    def _parse_number(self, text: str) -> Optional[float]:
+        match = PRICE_NUM_RE.search(text.replace("\xa0", " "))
+        if not match:
+            return None
+        try:
+            return float(match.group(0).replace(",", "."))
+        except ValueError:
+            return None
