@@ -70,6 +70,58 @@ class ProductMatcherService:
         re.IGNORECASE,
     )
 
+    # For Овочі/Фрукти/М'ясо і риба, the user explicitly asked to match on
+    # the core product name only and ignore extra descriptive words (variety,
+    # brand, "фермерське", origin, etc.) - a deliberate trade-off toward more
+    # cross-store comparisons at the cost of conflating e.g. different apple
+    # varieties into one row. Produce listings consistently lead with the
+    # base noun ("Яблуко Гала", "Кавун Вогник"), so the first word alone is
+    # the core name.
+    PRODUCE_CATEGORIES = {'овочі', 'фрукти', 'фрукти та овочі'}
+
+    # Meat/fish names don't follow one consistent word order across stores
+    # ("Ребро яловиче" vs "Свинний фермерський биток" - cut can lead or
+    # trail), so instead of taking the first N words, keep only the tokens
+    # that are recognized cut/animal-type/fish vocabulary (after
+    # NAME_SYNONYMS root normalization above) and drop everything else
+    # (brand, "фермерське", "домашнє", quality-grade words, etc).
+    MEAT_CATEGORIES = {"м'ясо і риба"}
+    MEAT_CORE_WORDS = {
+        # animal / poultry / fish types
+        'яловичина', 'свинина', 'телятина', 'курятина', 'індичатина',
+        'кролик', 'качка', 'гуска', 'лосось', 'оселедець', 'скумбрія',
+        'тріска', 'минтай', 'судак', 'короп', 'тунець', 'дорадо', 'сібас',
+        'креветки', 'мідії', 'кальмари', 'риба',
+        # cuts / parts
+        'ребро', 'грудинка', 'філе', 'стегно', 'гомілка', 'вирізка',
+        'лопатка', 'окіст', 'шия', 'ошийок', 'спинка', 'крило', 'четвертина',
+        'тушка', 'антрекот', 'биток', 'язик', 'печінка', 'серце', 'нирки',
+        'фарш', 'стейк', 'корейка', 'рулька', 'підчеревина', 'шинка',
+        'балик',
+        # deli / sausages (their own category slugs feed into М'ясо і риба)
+        'ковбаса', 'ковбаски', 'сосиски', 'сардельки', 'бекон', 'буженина',
+        'паштет',
+    }
+
+    def _simplify_core_name(self, name: str, category: str) -> str:
+        """Reduce a produce/meat name to just its core word(s) - see
+        PRODUCE_CATEGORIES/MEAT_CATEGORIES above for why and how."""
+        cat = (category or '').strip().lower()
+        tokens = name.split()
+        if not tokens:
+            return name
+
+        if cat in self.PRODUCE_CATEGORIES:
+            return tokens[0]
+
+        if cat in self.MEAT_CATEGORIES:
+            core = [t for t in tokens if t.lower() in self.MEAT_CORE_WORDS]
+            # Falls back to the untouched name when nothing recognized,
+            # rather than the alternative of returning an empty string.
+            return ' '.join(core) if core else name
+
+        return name
+
     # Common brands/prefixes to extract
     BRAND_PATTERNS = {
         r'\b(kiš|киш)\b': 'Kiš',
@@ -178,6 +230,7 @@ class ProductMatcherService:
         canonical_name, unit = self._extract_name_and_unit(
             self._strip_filler_words(self._apply_synonyms(name))
         )
+        canonical_name = self._simplify_core_name(canonical_name, category)
 
         # Generate canonical key for grouping
         canonical_key = self._generate_canonical_key(canonical_name, category)
