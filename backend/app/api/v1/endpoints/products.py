@@ -335,7 +335,7 @@ async def get_product_list(
 
 
 
-async def _persist_live_products(products: List[dict], country: str = "ME") -> None:
+async def _persist_live_products(products: List[dict], country: str = "ME", stores: Optional[List[dict]] = None) -> None:
     """
     Upsert freshly-scraped products into MongoDB's `products` collection so
     `/matrix` can serve them without re-scraping, and keep a bounded price
@@ -343,6 +343,16 @@ async def _persist_live_products(products: List[dict], country: str = "ME") -> N
 
     Best-effort: if MongoDB isn't connected, this silently no-ops - the live
     endpoint must keep working even without a database.
+
+    Merges into the existing doc's `prices` rather than blanket-overwriting
+    it: a store missing from THIS run's `prices[i]` (None) keeps its last
+    known price instead of losing it. Without this, a single store having a
+    bad scrape (e.g. temporarily rate-limited/blocked - happened to Сільпо
+    for a stretch of this session) wipes out every group it used to
+    contribute to on the very next live refresh, even though the store
+    itself didn't actually stop carrying those products. `stores` (in the
+    same order the `prices` arrays are indexed) is needed to recompute
+    `cheapest_store` after a merge might change which index is cheapest.
     """
     try:
         db = get_mongo_db()
@@ -351,17 +361,40 @@ async def _persist_live_products(products: List[dict], country: str = "ME") -> N
 
     now = datetime.utcnow()
     collection = db.products
+    store_names = [s["name"] for s in stores] if stores else None
 
     for product in products:
+        prices = list(product["prices"])
+        promo = list(product.get("promo") or [False] * len(prices))
+
+        existing = await collection.find_one(
+            {"id": product["id"], "country": country}, {"prices": 1, "promo": 1}
+        )
+        if existing:
+            old_prices = existing.get("prices") or []
+            old_promo = existing.get("promo") or []
+            for i in range(len(prices)):
+                if prices[i] is None and i < len(old_prices) and old_prices[i] is not None:
+                    prices[i] = old_prices[i]
+                    promo[i] = old_promo[i] if i < len(old_promo) else False
+
+        valid_prices = [p for p in prices if p is not None and p > 0]
+        min_price = min(valid_prices) if valid_prices else None
+        cheapest_store = None
+        if min_price is not None and store_names and len(store_names) == len(prices):
+            cheapest_store = store_names[prices.index(min_price)]
+        else:
+            cheapest_store = product.get("cheapest_store")
+
         set_fields = {
             "id": product["id"],
             "name": product["name"],
             "unit": product["unit"],
-            "prices": product["prices"],
-            "promo": product.get("promo"),
+            "prices": prices,
+            "promo": promo,
             "image_url": product.get("image_url"),
-            "min_price": product.get("min_price"),
-            "cheapest_store": product.get("cheapest_store"),
+            "min_price": min_price,
+            "cheapest_store": cheapest_store,
             "category": product.get("category"),
             "country": country,
             "updated_at": now,
@@ -382,7 +415,7 @@ async def _persist_live_products(products: List[dict], country: str = "ME") -> N
                 "$set": set_fields,
                 "$push": {
                     "price_history": {
-                        "$each": [{"date": now, "prices": product["prices"]}],
+                        "$each": [{"date": now, "prices": prices}],
                         "$slice": -30,  # keep the last 30 snapshots per product
                     }
                 },
@@ -393,7 +426,9 @@ async def _persist_live_products(products: List[dict], country: str = "ME") -> N
     logger.info(f"Persisted {len(products)} live products ({country}) to MongoDB")
 
 
-async def _persist_live_products_background(products: List[dict], country: str = "ME") -> None:
+async def _persist_live_products_background(
+    products: List[dict], country: str = "ME", stores: Optional[List[dict]] = None
+) -> None:
     """
     Fire-and-forget wrapper around _persist_live_products().
 
@@ -403,9 +438,15 @@ async def _persist_live_products_background(products: List[dict], country: str =
     the frontend's request timeout for what should be a fast, best-effort
     side effect. Run it as a detached task with a hard cap instead, so a dead
     Mongo never slows down the live price matrix response.
+
+    Timeout is generous (not 5s) because _persist_live_products now does one
+    extra read per product (to merge prices - see its docstring), and a
+    country's full catalog can be 1500+ products; this task doesn't block
+    the HTTP response either way, so there's little cost to letting it run
+    longer before giving up.
     """
     try:
-        await asyncio.wait_for(_persist_live_products(products, country), timeout=5.0)
+        await asyncio.wait_for(_persist_live_products(products, country, stores), timeout=60.0)
     except Exception as e:
         logger.warning(f"Failed to persist live matrix to MongoDB: {e}")
 
@@ -495,7 +536,7 @@ async def get_price_matrix_live(
 
         products = [_build_product_row(group, stores, lang) for group in grouped]
 
-        asyncio.create_task(_persist_live_products_background(products, country))
+        asyncio.create_task(_persist_live_products_background(products, country, stores))
 
         return {
             "stores": stores,
@@ -544,7 +585,9 @@ async def get_products_by_category(
         ]
 
         asyncio.create_task(
-            _persist_live_products_background([p for cat in categories for p in cat["products"]], country)
+            _persist_live_products_background(
+                [p for cat in categories for p in cat["products"]], country, stores
+            )
         )
 
         return {
@@ -644,7 +687,7 @@ async def refresh_prices_job() -> None:
 
         stores = await get_stores_for_country("ME")
         products = [_build_product_row(group, stores) for group in grouped]
-        await _persist_live_products(products, "ME")
+        await _persist_live_products(products, "ME", stores)
         logger.info(f"Scheduled price refresh: persisted {len(products)} products")
     except Exception as e:
         logger.error(f"Scheduled price refresh failed: {e}")

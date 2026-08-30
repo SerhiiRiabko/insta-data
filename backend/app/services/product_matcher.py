@@ -247,13 +247,23 @@ class ProductMatcherService:
         )
         canonical_name = self._simplify_core_name(canonical_name, category)
 
-        # Generate canonical key for grouping
-        canonical_key = self._generate_canonical_key(canonical_name, category)
-
         # Infer category from name if not provided
         if not category or category == 'other':
             inferred_cat = self._infer_category(canonical_name)
             category = inferred_cat or 'Other'
+
+        # Eggs get shelved under "Молочка" by both the scrapers (Novus's own
+        # "dairy-and-eggs" category) and by hand when collecting Сільпо/АТБ
+        # data manually, matching how the physical stores group them - but
+        # the user explicitly asked for eggs as their own category rather
+        # than folded into dairy, so split them out here (before the key is
+        # built, so eggs don't accidentally share a key with dairy) - same
+        # pattern as the produce Овочі/Фрукти split.
+        if category == "молочка" and re.search(r'\bяйц\w*|\bяєчн\w*', canonical_name, re.IGNORECASE):
+            category = "яйця"
+
+        # Generate canonical key for grouping
+        canonical_key = self._generate_canonical_key(canonical_name, category)
 
         return {
             **product,
