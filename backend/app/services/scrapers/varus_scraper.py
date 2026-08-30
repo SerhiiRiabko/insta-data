@@ -47,6 +47,12 @@ CATEGORIES = [
     ("zamorozheni-produkti", "Заморожені продукти"),
     ("kolbasy-sosiski-delikatesy", "М'ясо і риба"),
     ("alkogol", "Алкоголь"),
+    # Whole product groups that weren't covered at all before, not just
+    # more food (found via site nav).
+    ("tovari-dlya-ditey", "Дитячі товари"),
+    ("kosmetika-ta-doglyad", "Особиста гігієна"),
+    ("pobutova-himiya", "Побутова хімія"),
+    ("tovari-dlya-tvarin", "Зоотовари"),
 ]
 
 PRICE_NUM_RE = re.compile(r"[\d.,]+")

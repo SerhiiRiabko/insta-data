@@ -48,6 +48,12 @@ CATEGORIES = [
     ("kovbasni-vyroby-i-m-iasni-delikatesy-4731", "М'ясо і риба"),
     ("yaitsia-528", "Молочка"),
     ("alkogol-22", "Алкоголь"),
+    # Whole product groups that weren't covered at all before, not just
+    # more food (found via site nav).
+    ("dytiachi-tovary-449", "Дитячі товари"),
+    ("osobysta-gigiiena-5266", "Особиста гігієна"),
+    ("pobutova-khimiia-4588", "Побутова хімія"),
+    ("dlia-tvaryn-653", "Зоотовари"),
 ]
 
 # "Ім'я, 500г, стара ціна 199 гривень, знижка 30%, нова ціна 139.3 гривень"

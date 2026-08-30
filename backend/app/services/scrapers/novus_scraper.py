@@ -53,6 +53,12 @@ CATEGORIES = [
     ("tins-jars-cooking", "Консервація"),
     ("frozen", "Заморожені продукти"),
     ("eighteen-plus", "Алкоголь"),
+    # Whole product groups that weren't covered at all before, not just
+    # more food (found via site nav).
+    ("babies", "Дитячі товари"),
+    ("personal-hygiene", "Особиста гігієна"),
+    ("household-chemicals", "Побутова хімія"),
+    ("for-animals", "Зоотовари"),
 ]
 
 PRICE_NUM_RE = re.compile(r"[\d.,]+")

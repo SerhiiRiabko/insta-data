@@ -54,6 +54,12 @@ CATEGORIES = [
     ("299-konditers-ki-virobi", "Солодощі та снеки"),
     ("285-bakaliya", "Бакалія"),
     ("292-alkogol-i-tyutyun", "Алкоголь"),
+    # Whole product groups that weren't covered at all before, not just
+    # more food (found via site nav).
+    ("339-dityache-kharchuvannya", "Дитячі товари"),
+    ("290-gigiena-i-kosmetika", "Особиста гігієна"),
+    ("308-pobutova-khimiya-ta-neprodovol-chi-tovari", "Побутова хімія"),
+    ("436-tovari-dlya-tvarin", "Зоотовари"),
 ]
 
 NAME_RE = re.compile(r"^Купити\s+(.+?)\s+у\s+АТБ\s*Market$", re.IGNORECASE)
