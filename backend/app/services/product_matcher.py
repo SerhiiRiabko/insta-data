@@ -47,6 +47,28 @@ class ProductMatcherService:
         # "Томати" and "Томат" as two different words and never merges them.
         (re.compile(r'томат\w*', re.IGNORECASE), 'томат'),
         (re.compile(r'сьомг\w*', re.IGNORECASE), 'лосось'),
+        # Produce singular/plural (found live: АТБ writes "Огірки"/
+        # "Кабачки"/"Баклажани", Сільпо/Varus write "Огірок"/"Кабачок"/
+        # "Баклажан" - since _simplify_core_name reduces a produce name to
+        # just its first word, an unnormalized plural never matches the
+        # singular form used elsewhere). Ukrainian о/і "fleeting vowel"
+        # alternation (огірок -> огірки, кабачок -> кабачки) means a plain
+        # suffix strip can't derive one from the other, so these are
+        # explicit pairs, same as томат/лосось above - added as they're
+        # found rather than attempting general Ukrainian morphology.
+        (re.compile(r'\bогірк(?:и|ів|а)\b', re.IGNORECASE), 'огірок'),
+        (re.compile(r'\bкабачк(?:и|ів|а)\b', re.IGNORECASE), 'кабачок'),
+        (re.compile(r'\bбаклажан(?:и|ів|а)\b', re.IGNORECASE), 'баклажан'),
+        (re.compile(r'\bбуряк(?:и|ів|а)\b', re.IGNORECASE), 'буряк'),
+        (re.compile(r'\bперц(?:і|ів|ю)\b', re.IGNORECASE), 'перець'),
+        (re.compile(r'\bцибул(?:і|ь|ю)\b', re.IGNORECASE), 'цибуля'),
+        (re.compile(r'\bморкв(?:и|і|ю)\b', re.IGNORECASE), 'морква'),
+        (re.compile(r'\bкартопл(?:і|ь|ю)\b', re.IGNORECASE), 'картопля'),
+        (re.compile(r'\bкапуст(?:и|і|у)\b', re.IGNORECASE), 'капуста'),
+        (re.compile(r'\bяблук(?:а|ах)\b', re.IGNORECASE), 'яблуко'),
+        (re.compile(r'\bгруш(?:і|ок|у)\b', re.IGNORECASE), 'груша'),
+        (re.compile(r'\bкавун(?:и|ів|а)\b', re.IGNORECASE), 'кавун'),
+        (re.compile(r'\bдин(?:і|ю)\b', re.IGNORECASE), 'диня'),
         # Meat-cut vocabulary (found by manually browsing Varus/Сільпо/Novus
         # meat pages): the exact same cut is grammatically inflected
         # differently store to store ("Ребро яловиче охолоджене" vs "Ребра
