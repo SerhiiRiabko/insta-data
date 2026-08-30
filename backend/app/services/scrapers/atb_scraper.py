@@ -53,6 +53,7 @@ CATEGORIES = [
     ("307-napoi", "Напої"),
     ("299-konditers-ki-virobi", "Солодощі та снеки"),
     ("285-bakaliya", "Бакалія"),
+    ("292-alkogol-i-tyutyun", "Алкоголь"),
 ]
 
 NAME_RE = re.compile(r"^Купити\s+(.+?)\s+у\s+АТБ\s*Market$", re.IGNORECASE)

@@ -46,6 +46,7 @@ CATEGORIES = [
     ("konservi-ta-solinnya", "Консервація"),
     ("zamorozheni-produkti", "Заморожені продукти"),
     ("kolbasy-sosiski-delikatesy", "М'ясо і риба"),
+    ("alkogol", "Алкоголь"),
 ]
 
 PRICE_NUM_RE = re.compile(r"[\d.,]+")

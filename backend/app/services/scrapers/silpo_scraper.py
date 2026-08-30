@@ -47,6 +47,7 @@ CATEGORIES = [
     ("zamorozhena-produktsiia-264", "Заморожені продукти"),
     ("kovbasni-vyroby-i-m-iasni-delikatesy-4731", "М'ясо і риба"),
     ("yaitsia-528", "Молочка"),
+    ("alkogol-22", "Алкоголь"),
 ]
 
 # "Ім'я, 500г, стара ціна 199 гривень, знижка 30%, нова ціна 139.3 гривень"
