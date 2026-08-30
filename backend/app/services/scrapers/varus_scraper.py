@@ -30,6 +30,13 @@ CATEGORIES = [
     ("siri", "Сири"),
     ("kuryatina", "М'ясо і риба"),
     ("riba-oholodzhena", "М'ясо і риба"),
+    # Found by browsing the site nav (kuryatina only covers chicken) -
+    # svinina/yalovichina are the pork/beef listing pages, grudinka is a
+    # dedicated brisket page; without these, cuts like ribs/brisket never
+    # appeared in the scrape at all.
+    ("svinina", "М'ясо і риба"),
+    ("yalovichina", "М'ясо і риба"),
+    ("grudinka", "М'ясо і риба"),
     ("hlibobulochni-virobi", "Хлібобулочні вироби"),
     ("bezalkogolni-napoi", "Напої"),
     ("konditerski-virobi-ta-solodoschi", "Солодощі та снеки"),

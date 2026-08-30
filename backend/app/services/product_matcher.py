@@ -41,7 +41,34 @@ class ProductMatcherService:
     NAME_SYNONYMS = [
         (re.compile(r'помідор\w*', re.IGNORECASE), 'томат'),
         (re.compile(r'сьомг\w*', re.IGNORECASE), 'лосось'),
+        # Meat-cut vocabulary (found by manually browsing Varus/Сільпо/Novus
+        # meat pages): the exact same cut is grammatically inflected
+        # differently store to store ("Ребро яловиче охолоджене" vs "Ребра
+        # яловичі охолоджені") - root-based substitution to one canonical
+        # form per concept, same pattern as томат/лосось above. Chilled vs
+        # frozen is a real, price-relevant distinction, so they're
+        # normalized to two DIFFERENT canonical forms, not merged together.
+        # Word-bounded to "ребро/ребра/ребер/реберця/реберце" specifically -
+        # a bare r'ребр\w*' would also catch unrelated words like
+        # "ребристий" (ridge-cut, e.g. chips) and wrongly rename them.
+        (re.compile(r'\bребр(?:о|а|ер|ц\w*)\b', re.IGNORECASE), 'ребро'),
+        (re.compile(r'грудин\w*', re.IGNORECASE), 'грудинка'),
+        (re.compile(r'ялович\w*', re.IGNORECASE), 'яловичина'),
+        (re.compile(r'теляч\w*', re.IGNORECASE), 'телятина'),
+        (re.compile(r'свин\w*', re.IGNORECASE), 'свинина'),
+        (re.compile(r'охолодж\w*', re.IGNORECASE), 'охолоджений'),
+        (re.compile(r'заморож\w*', re.IGNORECASE), 'заморожений'),
+        (re.compile(r'копчен\w*', re.IGNORECASE), 'копчений'),
     ]
+
+    # Words that describe how a product is sold/packaged, not what it is -
+    # safe to drop entirely rather than substitute, since keeping them just
+    # adds noise that blocks otherwise-identical names from matching (e.g.
+    # "Яблуко Гала" vs "Яблуко Гала вагове" - same product either way).
+    FILLER_WORDS_RE = re.compile(
+        r'\b(ваговий|вагова|вагове|вагові|фасований|фасована|фасоване|фасовані)\b',
+        re.IGNORECASE,
+    )
 
     # Common brands/prefixes to extract
     BRAND_PATTERNS = {
@@ -148,7 +175,9 @@ class ProductMatcherService:
         category = product.get('category', 'Other').lower()
 
         # Extract canonical name and unit
-        canonical_name, unit = self._extract_name_and_unit(self._apply_synonyms(name))
+        canonical_name, unit = self._extract_name_and_unit(
+            self._strip_filler_words(self._apply_synonyms(name))
+        )
 
         # Generate canonical key for grouping
         canonical_key = self._generate_canonical_key(canonical_name, category)
@@ -191,6 +220,12 @@ class ProductMatcherService:
             name = pattern.sub(canonical, name)
         return name
 
+    def _strip_filler_words(self, name: str) -> str:
+        """Drop sale-format words (see FILLER_WORDS_RE) and collapse the
+        resulting double spaces."""
+        name = self.FILLER_WORDS_RE.sub('', name)
+        return re.sub(r'\s+', ' ', name).strip()
+
     def _extract_name_and_unit(self, name: str) -> Tuple[str, str]:
         """
         Extract product name and unit from full name string.
@@ -225,10 +260,17 @@ class ProductMatcherService:
         """
         Generate a canonical key for grouping products.
         Combines normalized name and category.
+
+        Tokens are sorted before joining, so word order doesn't matter -
+        different stores phrase the same product differently ("Вода
+        мінеральна Моршинська негазована" vs "Мінеральна вода Моршинська
+        негазована"), and without this they'd never match despite being
+        the exact same words.
         """
         # Remove special characters and extra spaces
         clean_name = re.sub(r'[^\w\s]', '', name.lower())
-        clean_name = re.sub(r'\s+', '_', clean_name).strip('_')
+        tokens = sorted(clean_name.split())
+        clean_name = '_'.join(tokens)
         clean_cat = re.sub(r'\s+', '_', category.lower()).strip('_')
 
         return f"{clean_name}_{clean_cat}"

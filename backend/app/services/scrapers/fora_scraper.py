@@ -38,6 +38,10 @@ CATEGORIES = [
     ("syry-tverdi-3636", "Сири"),
     ("8svizhe-m-iaso-2700", "М'ясо і риба"),
     ("zhyva-ta-okholodzhena-ryba-ta-moreprodukty-2702", "М'ясо і риба"),
+    # Pork/beef listing pages (found via site nav) - not yet covered by the
+    # combined "Свіже м'ясо" page above.
+    ("svynyna-2725", "М'ясо і риба"),
+    ("yalovychyna-2729", "М'ясо і риба"),
     ("khlib-2912", "Хлібобулочні вироби"),
     ("soky-ta-bezalkogolni-napoi-2479", "Напої"),
     ("tsukerky-2934", "Солодощі та снеки"),

@@ -39,6 +39,11 @@ CATEGORIES = [
     (_PRODUCE_SLUG, "Фрукти та овочі"),
     ("dairy-and-eggs", "Молочка"),
     ("meat-fish-poultry", "М'ясо і риба"),
+    # The combined page's first ~30 tiles are mostly deli/sausage items -
+    # these facet filters (found via site nav) surface raw cuts like ribs
+    # and brisket that never appeared otherwise.
+    ("meat-fish-poultry/meat-part=ribs", "М'ясо і риба"),
+    ("meat-fish-poultry/meat-part=brisket", "М'ясо і риба"),
     ("bakery", "Хлібобулочні вироби"),
     ("drinks", "Напої"),
     ("snacks-and-sweets", "Солодощі та снеки"),

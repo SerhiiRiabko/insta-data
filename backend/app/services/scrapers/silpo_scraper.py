@@ -33,6 +33,11 @@ CATEGORIES = [
     ("syry-1468", "Сири"),
     ("m-iaso-4411", "М'ясо і риба"),
     ("ryba-4430", "М'ясо і риба"),
+    # m-iaso-4411 only surfaces its first ~60 items on load (mostly promo
+    # items) - pork/beef cuts like ribs live further down and were missed
+    # entirely. Found via site nav.
+    ("svynyna-4413", "М'ясо і риба"),
+    ("yalovychyna-ta-teliatyna-4414", "М'ясо і риба"),
     ("khlibobulochni-vyroby-5122", "Хлібобулочні вироби"),
     ("napoi-52", "Напої"),
     ("solodoshchi-498", "Солодощі та снеки"),

@@ -180,6 +180,19 @@ const TRANSLATIONS: Record<Lang, {
 
 const KOTOR_URL =
   'https://commons.wikimedia.org/wiki/Special:FilePath/Vista_de_Kotor,_Bah%C3%ADa_de_Kotor,_Montenegro,_2014-04-19,_DD_25.JPG?width=2000';
+const UKRAINE_URL =
+  'https://commons.wikimedia.org/wiki/Special:FilePath/Wheat_fields_in_Ukraine-5961.jpg?width=2000';
+
+// Tagline mentions the country by name, so unlike the rest of TRANSLATIONS
+// (which is country-agnostic UI copy) it needs a per-country variant.
+const TAGLINE_UA: Record<Lang, string> = {
+  rus: 'Сравнение цен на продукты в супермаркетах Украины',
+  ukr: 'Порівняння цін на продукти в супермаркетах України',
+  eng: 'Real-time grocery price comparison across Ukraine',
+  mne: 'Poređenje cijena prehrambenih proizvoda u supermarketima Ukrajine',
+  srb: 'Poređenje cena prehrambenih proizvoda u supermarketima Ukrajine',
+  bos: 'Poređenje cijena prehrambenih proizvoda u supermarketima Ukrajine',
+};
 
 function VariationA({
   lang,
@@ -463,7 +476,7 @@ function VariationA({
       <div
         className="px-5 pt-10 pb-14 md:px-0 md:pt-[72px] md:pb-[150px] min-h-0 md:min-h-[500px]"
         style={{
-          backgroundImage: `linear-gradient(180deg, rgba(6,78,59,0.5) 0%, rgba(6,78,59,0.22) 38%, rgba(6,78,59,0.82) 100%), url('${KOTOR_URL}')`,
+          backgroundImage: `linear-gradient(180deg, rgba(6,78,59,0.5) 0%, rgba(6,78,59,0.22) 38%, rgba(6,78,59,0.82) 100%), url('${country === 'UA' ? UKRAINE_URL : KOTOR_URL}')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center 38%',
           textAlign: 'center',
@@ -518,7 +531,7 @@ function VariationA({
             textShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
           }}
         >
-          {t.tagline}
+          {country === 'UA' ? TAGLINE_UA[lang] : t.tagline}
         </p>
 
         {/* Search Bar — stacked card on mobile, joined pill row on desktop */}
@@ -669,9 +682,15 @@ export function LandingPageDesignBrief() {
   // preference persisted in localStorage. Defaults to Montenegro (ME): the
   // only country with real data so far.
   const [country, setCountryState] = useState<Country>('ME');
+  // Gates the price-matrix fetch below until the localStorage-saved country
+  // has been read once, so we don't fire an ME fetch, show its (fuller)
+  // data, then immediately refetch and replace it with UA data - which
+  // looked like prices "disappearing" for anyone whose saved country is UA.
+  const [countryReady, setCountryReady] = useState(false);
   useEffect(() => {
     const saved = window.localStorage.getItem(COUNTRY_STORAGE_KEY);
     if (saved === 'ME' || saved === 'UA') setCountryState(saved);
+    setCountryReady(true);
   }, []);
   const setCountry = useCallback((c: Country) => {
     setCountryState(c);
@@ -772,10 +791,13 @@ export function LandingPageDesignBrief() {
     [lang, country]
   );
 
-  // Re-fetches whenever the URL locale or selected country changes.
+  // Re-fetches whenever the URL locale or selected country changes. Waits
+  // for countryReady so the very first fetch already uses the localStorage
+  // country instead of the 'ME' default, avoiding a wrong-country flash.
   useEffect(() => {
+    if (!countryReady) return;
     fetchMatrix();
-  }, [fetchMatrix]);
+  }, [fetchMatrix, countryReady]);
 
   // Pick up an existing session cookie (e.g. after a magic-link redirect,
   // or a returning visitor) - 401 just means "not logged in", not an error.
