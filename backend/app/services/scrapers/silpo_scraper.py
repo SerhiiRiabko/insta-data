@@ -69,6 +69,10 @@ REGULAR_RE = re.compile(
 MAX_PAGES_PER_CATEGORY = 2
 MIN_ITEMS_FOR_NEXT_PAGE = 20
 
+# Categories genuinely sold by weight (as opposed to a fixed-SKU package) -
+# see the per-100g note in _parse_item.
+WEIGHED_CATEGORIES = {"Овочі", "Фрукти", "М'ясо і риба"}
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -171,6 +175,21 @@ class SilpoScraper(BaseScraper):
             old_price = None
             name = match.group("name").strip()
             weight = match.group("weight").strip()
+
+        # Weighed produce/meat is priced as a "per 100g" reference (e.g.
+        # "Кавун; 100г; 2.00 грн" - 2 грн for a whole watermelon makes no
+        # sense, but 20 грн/kg does) - the same convention found on Varus,
+        # just without Varus's explicit "за 100 г" wording. Packaged goods
+        # in other categories also show a "весг" weight but that's the
+        # real package size with a real whole-package price (e.g. "Молоко
+        # ..., 900г, ... 44.99 гривень" - genuinely ~45 грн for the carton),
+        # so this only applies to the categories that are actually sold by
+        # weight, not to every product whose weight happens to say "100г".
+        if category in WEIGHED_CATEGORIES and re.match(r'^100\s*г$', weight, re.IGNORECASE):
+            price *= 10
+            if old_price is not None:
+                old_price *= 10
+            weight = "1 кг"
 
         href = item.get("href") or ""
         url = href if href.startswith("http") else f"{self.base_url}{href}"
