@@ -40,6 +40,12 @@ class ProductMatcherService:
     # (помідор/помідори/помідора/...).
     NAME_SYNONYMS = [
         (re.compile(r'помідор\w*', re.IGNORECASE), 'томат'),
+        # АТБ writes plural "Томати" for most of its listings ("Томати
+        # тепличні", "Томати рожеві") while other stores/synonyms above
+        # settle on singular "томат" - without this, produce core-name
+        # matching (first word only, see _simplify_core_name) treats
+        # "Томати" and "Томат" as two different words and never merges them.
+        (re.compile(r'томат\w*', re.IGNORECASE), 'томат'),
         (re.compile(r'сьомг\w*', re.IGNORECASE), 'лосось'),
         # Meat-cut vocabulary (found by manually browsing Varus/Сільпо/Novus
         # meat pages): the exact same cut is grammatically inflected
@@ -59,6 +65,15 @@ class ProductMatcherService:
         (re.compile(r'охолодж\w*', re.IGNORECASE), 'охолоджений'),
         (re.compile(r'заморож\w*', re.IGNORECASE), 'заморожений'),
         (re.compile(r'копчен\w*', re.IGNORECASE), 'копчений'),
+        # More cut-name plurals/cases (found in АТБ's listings, e.g.
+        # "Крильця курячі" / "Гомілки курячі") - MEAT_CORE_WORDS below only
+        # does exact-word matching, so without normalizing these to one
+        # singular form first, the plural spelling never matches it.
+        (re.compile(r'\bгомілк(?:а|и|у|ою|ах)\b', re.IGNORECASE), 'гомілка'),
+        (re.compile(r'\bстегн(?:о|а|ах|ами)\b', re.IGNORECASE), 'стегно'),
+        (re.compile(r'\bкрил(?:о|а|ьця|ець|ах)\b', re.IGNORECASE), 'крило'),
+        (re.compile(r'\bчетвертин(?:а|и|ах)\b', re.IGNORECASE), 'четвертина'),
+        (re.compile(r'\bтушк(?:а|и|ах|ою)\b', re.IGNORECASE), 'тушка'),
     ]
 
     # Words that describe how a product is sold/packaged, not what it is -
