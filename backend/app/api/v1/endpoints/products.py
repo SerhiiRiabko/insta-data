@@ -627,8 +627,13 @@ async def get_price_matrix_cached(
     docs: list = []
     try:
         db = get_mongo_db()
+        # Cap raised from 2000: UA alone now has 2300+ products (grew a lot
+        # this session - new categories, ATB, alcohol) and was silently
+        # getting truncated by ~16% before this. 10000 is generous headroom
+        # for the foreseeable future rather than a number picked to exactly
+        # match today's count.
         docs = await asyncio.wait_for(
-            db.products.find({"country": country}).sort("updated_at", -1).to_list(2000), timeout=5.0
+            db.products.find({"country": country}).sort("updated_at", -1).to_list(10000), timeout=8.0
         )
     except Exception as e:
         logger.warning(f"matrix-cached: falling back ({e})")
