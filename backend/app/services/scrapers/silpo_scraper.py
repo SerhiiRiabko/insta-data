@@ -41,6 +41,12 @@ CATEGORIES = [
     ("khlibobulochni-vyroby-5122", "Хлібобулочні вироби"),
     ("napoi-52", "Напої"),
     ("solodoshchi-498", "Солодощі та снеки"),
+    # Whole grocery aisles that weren't covered at all before (found via
+    # site nav) - pantry staples, canned goods, frozen food, deli meats, eggs.
+    ("bakaliia-i-konservy-4870", "Бакалія"),
+    ("zamorozhena-produktsiia-264", "Заморожені продукти"),
+    ("kovbasni-vyroby-i-m-iasni-delikatesy-4731", "М'ясо і риба"),
+    ("yaitsia-528", "Молочка"),
 ]
 
 # "Ім'я, 500г, стара ціна 199 гривень, знижка 30%, нова ціна 139.3 гривень"
@@ -55,6 +61,17 @@ PROMO_RE = re.compile(
 REGULAR_RE = re.compile(
     r"^(?P<name>.+?);\s*(?P<weight>[^;]+);\s*(?P<price>[\d.,]+)\s*грн\.?$",
     re.IGNORECASE,
+)
+
+# Category pages paginate via ?page=N (confirmed live, up to 14 pages on
+# some categories) - capped to bound total scrape time. See varus_scraper.py
+# for the same pattern/reasoning.
+MAX_PAGES_PER_CATEGORY = 2
+MIN_ITEMS_FOR_NEXT_PAGE = 20
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 
@@ -84,36 +101,45 @@ class SilpoScraper(BaseScraper):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             try:
-                page = await browser.new_page(
-                    user_agent=(
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    )
-                )
+                page = await browser.new_page(user_agent=USER_AGENT)
                 for slug, category in self.categories:
-                    url = f"{self.base_url}/category/{slug}"
-                    try:
-                        await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
-                        await page.wait_for_selector("a.product-card__link[aria-label]", timeout=15000)
-                        labels = await page.eval_on_selector_all(
-                            "a.product-card__link[aria-label]",
-                            """
-                            (elements) => elements.map(el => ({
-                                label: el.getAttribute('aria-label'),
-                                href: el.getAttribute('href'),
-                                img: el.querySelector('img') ? el.querySelector('img').getAttribute('src') : null,
-                            }))
-                            """,
-                        )
-                    except Exception as e:
-                        logger.warning(f"[{self.name}] Failed to load {url}: {e}")
-                        continue
+                    category_count = 0
+                    for page_num in range(1, MAX_PAGES_PER_CATEGORY + 1):
+                        url = f"{self.base_url}/category/{slug}" + (f"?page={page_num}" if page_num > 1 else "")
+                        try:
+                            if page.is_closed():
+                                # A previous navigation crashed the page - without
+                                # this every remaining category would silently
+                                # fail too.
+                                page = await browser.new_page(user_agent=USER_AGENT)
+                            await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                            await page.wait_for_selector("a.product-card__link[aria-label]", timeout=15000)
+                            labels = await page.eval_on_selector_all(
+                                "a.product-card__link[aria-label]",
+                                """
+                                (elements) => elements.map(el => ({
+                                    label: el.getAttribute('aria-label'),
+                                    href: el.getAttribute('href'),
+                                    img: el.querySelector('img') ? el.querySelector('img').getAttribute('src') : null,
+                                }))
+                                """,
+                            )
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] Failed to load {url}: {e}")
+                            break
 
-                    for item in labels:
-                        product = self._parse_item(item, category)
-                        if product:
-                            results.append(product)
-                    logger.info(f"[{self.name}] {slug}: {len(labels)} raw items")
+                        if not labels:
+                            break  # past the last page
+
+                        for item in labels:
+                            product = self._parse_item(item, category)
+                            if product:
+                                results.append(product)
+                        category_count += len(labels)
+
+                        if len(labels) < MIN_ITEMS_FOR_NEXT_PAGE:
+                            break  # short page - unlikely to be more after it
+                    logger.info(f"[{self.name}] {slug}: {category_count} raw items")
             finally:
                 await browser.close()
 

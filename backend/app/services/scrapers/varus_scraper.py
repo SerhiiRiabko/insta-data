@@ -40,9 +40,30 @@ CATEGORIES = [
     ("hlibobulochni-virobi", "Хлібобулочні вироби"),
     ("bezalkogolni-napoi", "Напої"),
     ("konditerski-virobi-ta-solodoschi", "Солодощі та снеки"),
+    # Whole grocery aisles that weren't covered at all before (found via
+    # site nav) - pantry staples, canned goods, frozen food, deli meats.
+    ("bakaliya", "Бакалія"),
+    ("konservi-ta-solinnya", "Консервація"),
+    ("zamorozheni-produkti", "Заморожені продукти"),
+    ("kolbasy-sosiski-delikatesy", "М'ясо і риба"),
 ]
 
 PRICE_NUM_RE = re.compile(r"[\d.,]+")
+
+# Each category page paginates via ?page=N (confirmed live - page 1 of
+# frukti-svizhi has 40 cards, ?page=2 has 32 different ones). Capped rather
+# than following every page (some categories run 10+ pages) to keep total
+# scrape time bounded - this alone still roughly doubles/triples per-category
+# yield versus only reading page 1.
+MAX_PAGES_PER_CATEGORY = 2
+# A page this short is very likely the last one - not worth spending another
+# request finding that out.
+MIN_ITEMS_FOR_NEXT_PAGE = 20
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 class VarusScraper(BaseScraper):
@@ -71,49 +92,59 @@ class VarusScraper(BaseScraper):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             try:
-                page = await browser.new_page(
-                    user_agent=(
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    )
-                )
+                page = await browser.new_page(user_agent=USER_AGENT)
                 for slug, category in self.categories:
-                    url = f"{self.base_url}/{slug}"
-                    try:
-                        await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
-                        await page.wait_for_selector(".sf-product-card", timeout=15000)
-                        items = await page.eval_on_selector_all(
-                            ".sf-product-card",
-                            """
-                            (cards) => cards.map(card => {
-                                const title = card.querySelector('.sf-product-card__title-wrapper');
-                                const special = card.querySelector('.sf-price__special');
-                                const old = card.querySelector('.sf-price__old');
-                                const regular = card.querySelector('.sf-price__regular');
-                                const unitEl = card.querySelector('.sf-product-card__quantity');
-                                const img = card.querySelector('img');
-                                if (!title) return null;
-                                return {
-                                    name: title.textContent.trim(),
-                                    href: title.getAttribute('href'),
-                                    special: special ? special.textContent.trim() : null,
-                                    old: old ? old.textContent.trim() : null,
-                                    regular: regular ? regular.textContent.trim() : null,
-                                    unit: unitEl ? unitEl.textContent.trim() : null,
-                                    img: img ? img.getAttribute('src') : null,
-                                };
-                            })
-                            """,
-                        )
-                    except Exception as e:
-                        logger.warning(f"[{self.name}] Failed to load {url}: {e}")
-                        continue
+                    category_count = 0
+                    for page_num in range(1, MAX_PAGES_PER_CATEGORY + 1):
+                        url = f"{self.base_url}/{slug}" + (f"?page={page_num}" if page_num > 1 else "")
+                        try:
+                            if page.is_closed():
+                                # A previous navigation crashed the page (seen on
+                                # a couple of categories during testing, cause
+                                # unconfirmed) - without this every remaining
+                                # category would silently fail too.
+                                page = await browser.new_page(user_agent=USER_AGENT)
+                            await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                            await page.wait_for_selector(".sf-product-card", timeout=15000)
+                            items = await page.eval_on_selector_all(
+                                ".sf-product-card",
+                                """
+                                (cards) => cards.map(card => {
+                                    const title = card.querySelector('.sf-product-card__title-wrapper');
+                                    const special = card.querySelector('.sf-price__special');
+                                    const old = card.querySelector('.sf-price__old');
+                                    const regular = card.querySelector('.sf-price__regular');
+                                    const unitEl = card.querySelector('.sf-product-card__quantity');
+                                    const img = card.querySelector('img');
+                                    if (!title) return null;
+                                    return {
+                                        name: title.textContent.trim(),
+                                        href: title.getAttribute('href'),
+                                        special: special ? special.textContent.trim() : null,
+                                        old: old ? old.textContent.trim() : null,
+                                        regular: regular ? regular.textContent.trim() : null,
+                                        unit: unitEl ? unitEl.textContent.trim() : null,
+                                        img: img ? img.getAttribute('src') : null,
+                                    };
+                                })
+                                """,
+                            )
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] Failed to load {url}: {e}")
+                            break
 
-                    for item in items:
-                        product = self._parse_item(item, category)
-                        if product:
-                            results.append(product)
-                    logger.info(f"[{self.name}] {slug}: {len(items)} raw items")
+                        if not items:
+                            break  # past the last page
+
+                        for item in items:
+                            product = self._parse_item(item, category)
+                            if product:
+                                results.append(product)
+                        category_count += len(items)
+
+                        if len(items) < MIN_ITEMS_FOR_NEXT_PAGE:
+                            break  # short page - unlikely to be more after it
+                    logger.info(f"[{self.name}] {slug}: {category_count} raw items")
             finally:
                 await browser.close()
 

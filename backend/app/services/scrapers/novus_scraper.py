@@ -47,9 +47,24 @@ CATEGORIES = [
     ("bakery", "Хлібобулочні вироби"),
     ("drinks", "Напої"),
     ("snacks-and-sweets", "Солодощі та снеки"),
+    # Whole grocery aisles that weren't covered at all before (found via
+    # site nav) - pantry staples, canned goods, frozen food.
+    ("packets-cereals", "Бакалія"),
+    ("tins-jars-cooking", "Консервація"),
+    ("frozen", "Заморожені продукти"),
 ]
 
 PRICE_NUM_RE = re.compile(r"[\d.,]+")
+
+# Category pages paginate via ?page=N (confirmed live) - capped to bound
+# total scrape time. See varus_scraper.py for the same pattern/reasoning.
+MAX_PAGES_PER_CATEGORY = 2
+MIN_ITEMS_FOR_NEXT_PAGE = 20
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 class NovusScraper(BaseScraper):
@@ -78,48 +93,57 @@ class NovusScraper(BaseScraper):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             try:
-                page = await browser.new_page(
-                    user_agent=(
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    )
-                )
+                page = await browser.new_page(user_agent=USER_AGENT)
                 for slug, category in self.categories:
-                    url = f"{self.base_url}/uk/categories/{slug}/"
-                    try:
-                        await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
-                        await page.wait_for_selector(".ProductTile", timeout=15000)
-                        items = await page.eval_on_selector_all(
-                            ".ProductTile",
-                            """
-                            (tiles) => tiles.map(t => {
-                                const title = t.querySelector('.ProductTile__title');
-                                const weight = t.querySelector('.ProductTile__weight');
-                                const oldPrice = t.querySelector('[data-marker="Old Price"] span');
-                                const curPrice = t.querySelector('[data-marker="Discounted Price"] span');
-                                const link = t.closest('a.ProductTileLink') || t.querySelector('a');
-                                const img = t.querySelector('img');
-                                if (!title || !curPrice) return null;
-                                return {
-                                    name: title.textContent.trim(),
-                                    weight: weight ? weight.textContent.trim() : null,
-                                    old: oldPrice ? oldPrice.textContent.trim() : null,
-                                    price: curPrice.textContent.trim(),
-                                    href: link ? link.getAttribute('href') : null,
-                                    img: img ? img.getAttribute('src') : null,
-                                };
-                            })
-                            """,
-                        )
-                    except Exception as e:
-                        logger.warning(f"[{self.name}] Failed to load {url}: {e}")
-                        continue
+                    category_count = 0
+                    for page_num in range(1, MAX_PAGES_PER_CATEGORY + 1):
+                        url = f"{self.base_url}/uk/categories/{slug}/" + (f"?page={page_num}" if page_num > 1 else "")
+                        try:
+                            if page.is_closed():
+                                # A previous navigation crashed the page - without
+                                # this every remaining category would silently
+                                # fail too.
+                                page = await browser.new_page(user_agent=USER_AGENT)
+                            await page.goto(url, timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                            await page.wait_for_selector(".ProductTile", timeout=15000)
+                            items = await page.eval_on_selector_all(
+                                ".ProductTile",
+                                """
+                                (tiles) => tiles.map(t => {
+                                    const title = t.querySelector('.ProductTile__title');
+                                    const weight = t.querySelector('.ProductTile__weight');
+                                    const oldPrice = t.querySelector('[data-marker="Old Price"] span');
+                                    const curPrice = t.querySelector('[data-marker="Discounted Price"] span');
+                                    const link = t.closest('a.ProductTileLink') || t.querySelector('a');
+                                    const img = t.querySelector('img');
+                                    if (!title || !curPrice) return null;
+                                    return {
+                                        name: title.textContent.trim(),
+                                        weight: weight ? weight.textContent.trim() : null,
+                                        old: oldPrice ? oldPrice.textContent.trim() : null,
+                                        price: curPrice.textContent.trim(),
+                                        href: link ? link.getAttribute('href') : null,
+                                        img: img ? img.getAttribute('src') : null,
+                                    };
+                                })
+                                """,
+                            )
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] Failed to load {url}: {e}")
+                            break
 
-                    for item in items:
-                        product = self._parse_item(item, category)
-                        if product:
-                            results.append(product)
-                    logger.info(f"[{self.name}] {slug}: {len(items)} raw items")
+                        if not items:
+                            break  # past the last page
+
+                        for item in items:
+                            product = self._parse_item(item, category)
+                            if product:
+                                results.append(product)
+                        category_count += len(items)
+
+                        if len(items) < MIN_ITEMS_FOR_NEXT_PAGE:
+                            break  # short page - unlikely to be more after it
+                    logger.info(f"[{self.name}] {slug}: {category_count} raw items")
             finally:
                 await browser.close()
 
