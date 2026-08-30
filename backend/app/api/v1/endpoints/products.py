@@ -669,26 +669,27 @@ async def get_price_matrix_cached(
     }
 
 
-async def refresh_prices_job() -> None:
+async def refresh_prices_job(country: str = "ME") -> None:
     """
     Full scrape-and-persist cycle for the weekly scheduled job (see
     app/main.py) - the same work /matrix-live does per-request, but awaited
     directly rather than fire-and-forget, since a background scheduler job
     has no HTTP response to protect from a slow Mongo write.
 
-    Montenegro-only: cijene.me is the only scraper pipeline that exists.
+    Runs once per country, scheduled separately (see app/main.py) so a
+    slow/failing country's scrape can't delay or crash the other's job.
     """
     try:
-        logger.info("Scheduled price refresh: starting live scrape...")
-        grouped, all_products = await _scrape_and_group_live()
+        logger.info(f"Scheduled price refresh ({country}): starting live scrape...")
+        grouped, all_products = await _scrape_and_group_live(country)
         if not grouped and not all_products:
-            logger.warning("Scheduled price refresh: scrape returned no products")
+            logger.warning(f"Scheduled price refresh ({country}): scrape returned no products")
             return
 
-        stores = await get_stores_for_country("ME")
+        stores = await get_stores_for_country(country)
         products = [_build_product_row(group, stores) for group in grouped]
-        await _persist_live_products(products, "ME", stores)
-        logger.info(f"Scheduled price refresh: persisted {len(products)} products")
+        await _persist_live_products(products, country, stores)
+        logger.info(f"Scheduled price refresh ({country}): persisted {len(products)} products")
     except Exception as e:
-        logger.error(f"Scheduled price refresh failed: {e}")
+        logger.error(f"Scheduled price refresh ({country}) failed: {e}")
 

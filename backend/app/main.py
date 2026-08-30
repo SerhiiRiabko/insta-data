@@ -55,18 +55,33 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ PostgreSQL not available: {e}")
         raise
 
-    # Weekly price refresh: real cijene.me scrape runs automatically every
-    # Monday 07:00 Kyiv time; the rest of the week the app serves the last
-    # persisted scan from MongoDB (/products/matrix-cached). The "Оновити
-    # ціни" button triggers the same scrape on demand via /products/matrix-live.
+    # Weekly price refresh: real scrapes run automatically every Monday
+    # night Kyiv time, before anyone's likely to be looking at the site;
+    # the rest of the week the app serves the last persisted scan from
+    # MongoDB (/products/matrix-cached). The "Оновити ціни" button triggers
+    # the same scrape on demand via /products/matrix-live.
+    #
+    # ME (cijene.me aggregator) is quick - a couple minutes. UA runs 5
+    # Playwright/Selenium scrapers and regularly takes 4-6 minutes, so its
+    # job starts 15 minutes after ME's to avoid the two competing for CPU/
+    # memory at the same time (this VPS also hosts other unrelated
+    # services). Both comfortably finish well before sunrise.
     scheduler.add_job(
         refresh_prices_job,
-        trigger=CronTrigger(day_of_week="mon", hour=7, minute=0, timezone=ZoneInfo("Europe/Kyiv")),
-        id="weekly_price_refresh",
+        trigger=CronTrigger(day_of_week="mon", hour=3, minute=0, timezone=ZoneInfo("Europe/Kyiv")),
+        id="weekly_price_refresh_me",
         replace_existing=True,
+        kwargs={"country": "ME"},
+    )
+    scheduler.add_job(
+        refresh_prices_job,
+        trigger=CronTrigger(day_of_week="mon", hour=3, minute=15, timezone=ZoneInfo("Europe/Kyiv")),
+        id="weekly_price_refresh_ua",
+        replace_existing=True,
+        kwargs={"country": "UA"},
     )
     scheduler.start()
-    logger.info("✅ Scheduler started: weekly price refresh (Mon 07:00 Europe/Kyiv)")
+    logger.info("✅ Scheduler started: weekly price refresh (Mon 03:00 ME / 03:15 UA, Europe/Kyiv)")
 
     yield
 
