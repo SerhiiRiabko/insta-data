@@ -1,53 +1,41 @@
-# Monte-Shop-Price Frontend
+# Shop Price Online — Frontend
 
-**Real-time grocery price comparison platform for Montenegro**
+**Real-time grocery price comparison across Montenegro (ME) and Ukraine (UA).**
+
+> ⚠️ This file used to describe a Phase-1 mock-data prototype (3 design
+> variations, 10 hardcoded products, /ru /uk /en routes). None of that is
+> current. See [`../CLAUDE.md`](../CLAUDE.md) for the actual day-by-day
+> changelog and [`../PROJECT_MAP.md`](../PROJECT_MAP.md) for architecture.
 
 ---
 
 ## 🎯 Overview
 
-Monte-Shop-Price is a modern price comparison platform that tracks grocery prices across 4 Montenegrin supermarkets:
-- **Aroma** (red badge)
-- **Voli** (blue badge)
-- **HDL** (orange badge)
-- **IDEA** (cyan badge)
+Next.js 15 / React 19 app. Only one landing design (`VariationA` inside
+`LandingPageDesignBrief.tsx`) is actually rendered — the "3 variations"
+mentioned in old docs exist only as static `.dc.html` design references,
+never built in React.
 
-Frontend: Next.js 15 React app with 3 landing page design variations.
-
----
-
-## ✨ Features (Phase 1 — Completed)
-
-### Landing Page Design
-- ✅ **3 design variations** (A, B, C)
-- ✅ **Variant C (Main)** — Immersive design with Kotor Bay background
-- ✅ **Interactive price matrix** — HTML table with 10 products × 4 stores
-- ✅ **Cheapest price highlight** — Green background + accent border
-- ✅ **Multi-language support** — Russian, Ukrainian, English (i18n)
-- ✅ **Responsive layout** — Mobile-optimized
-- ✅ **Mock data** — 10 realistic products with EUR prices
+Live data comes from the backend's `/products/matrix-cached` (fast, cached)
+and `/products/matrix-live` (real scrape, slow — used by the "Оновити ціни"
+button and the country-switch trigger). A country `<select>` next to the
+language switcher (persisted in `localStorage`) picks ME or UA; the store
+columns and currency symbol (€/₴) update accordingly.
 
 ---
 
 ## 🚀 Quick Start
 
-### Installation
 ```bash
-cd frontend
 npm install
-```
-
-### Development Server
-```bash
 npm run dev
 ```
 
-Access: **http://localhost:3003/[lang]/landing**
-- `/ru/landing` — Russian
-- `/uk/landing` — Ukrainian
-- `/en/landing` — English
+Needs `.env.local` with `NEXT_PUBLIC_API_URL` pointing at a running backend
+(see `../backend/`). Real routes: `/[lang]` where `lang` is one of
+`ukr rus mne srb bos eng` (URL locale = single source of truth, matches
+`next-intl` config) — e.g. `http://localhost:3001/ukr`.
 
-### Build for Production
 ```bash
 npm run build
 npm start
@@ -59,82 +47,31 @@ npm start
 
 | File | Purpose |
 |------|---------|
-| `src/components/PriceMatrixLanding.tsx` | Price comparison table (HTML <table>) |
-| `src/components/LandingPageDesignBrief.tsx` | 3 design variations (A, B, C) |
-| `tailwind.config.ts` | Brand colors, fonts, design tokens |
-| `src/app/[lang]/landing/page.tsx` | Landing page route |
-| `PROJECT_MAP.md` | Full architecture & status |
-
----
-
-## 🎨 Variant C (Current)
-
-**Immersive design with:**
-- Full-screen Kotor Bay background
-- Dark header band with hero content
-- Mint green background section
-- Store chips (horizontal: Aroma, Voli, HDL, IDEA)
-- Price matrix table with:
-  - 10 products (rows)
-  - 4 stores (columns)
-  - Cheapest column (highlighted)
-  - 30% gray underlayment for readability
-  - Horizontal + vertical lines
-
----
-
-## 📊 Mock Data
-
-**Products:** 10 items (milk, bread, eggs, cheese, bananas, coffee, oil, water, burgers, parmesan)
-
-**Stores:** 4 supermarkets with color badges
-
-**Prices:** EUR € with locale-specific formatting
+| `src/components/LandingPageDesignBrief.tsx` | The one actually-rendered landing page (country/lang state, data fetching, header) |
+| `src/components/PriceMatrixLanding.tsx` | Desktop price table (`<table>`, sticky header + sticky category labels, cheapest/promo highlighting) |
+| `src/components/PriceCardsMobile.tsx` | Mobile card list (same data, different layout) |
+| `src/lib/productMatrix.ts` | Shared types (`MatrixProduct`, `Country`, `Lang`), `formatPrice()` (€/₴), category grouping + sort |
+| `src/lib/api.ts` | Axios client, all backend API calls |
+| `src/app/[lang]/admin/AdminPageClient.tsx` | Admin panel (stores incl. country, scraper agents, tiers, users) |
+| `src/app/[lang]/list/[id]/ShoppingListView.tsx` | Shared/saved shopping list page |
 
 ---
 
 ## 🌐 Localization
 
-Supports 3 languages (RU / UK / EN):
-- Hero tagline
-- Search placeholder
-- Navigation
-- Table headers
-
-Edit `TRANSLATIONS` in `LandingPageDesignBrief.tsx` to add/modify.
+6 locales (`ukr rus mne srb bos eng`), URL-segment-driven via `next-intl`.
+Landing-page copy lives in `TRANSLATIONS` inside
+`LandingPageDesignBrief.tsx`; shared table/category strings live in
+`translations` inside `lib/productMatrix.ts`.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Framework:** Next.js 15
-- **UI:** React 19 + TypeScript
-- **Styling:** Tailwind CSS 4
-- **Localization:** next-intl
-- **Fonts:** Google Fonts (Plus Jakarta Sans, Space Grotesk)
+Next.js 15 · React 19 · TypeScript · Tailwind CSS 4 (inline styles used
+heavily in the price table for guaranteed rendering) · next-intl · Axios ·
+Google Fonts (Plus Jakarta Sans, Space Grotesk)
 
 ---
 
-## 🚀 Phase 2+ (Planned)
-
-- [ ] Backend API (FastAPI)
-- [ ] Real price data scrapers
-- [ ] Search & filtering
-- [ ] Price history charts
-- [ ] User authentication
-- [ ] Favorites & alerts
-- [ ] Admin panel
-
----
-
-## 📖 Full Documentation
-
-See `PROJECT_MAP.md` for:
-- Complete architecture
-- Component details
-- Design decisions
-- Feature roadmap
-
----
-
-**Last Updated:** 2026-06-23
+**Last Updated:** 2026-08-30

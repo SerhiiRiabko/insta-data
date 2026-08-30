@@ -1,18 +1,59 @@
-# 📊 Insta-Data Project Status
+# 📊 Shop Price Online Project Status
 
-**Last Updated:** 2026-07-17
-**Status:** 🟢 DEPLOYED — http://138.199.204.107:3010 (Phase 4.0-4.6 done)
-**Version:** 1.0.0
+**Last Updated:** 2026-08-30
+**Status:** 🟢 DEPLOYED — http://138.199.204.107:3010 (ME + UA, multi-country)
+**Version:** 1.1.0 (renamed from Insta-Data / Monte-Shop-Price on 2026-08-29)
 
 > ⚠️ **This file is a point-in-time snapshot, updated occasionally.** For the
-> current, actively-maintained project status, read **[PROJECT_MAP.md](PROJECT_MAP.md)**
-> first — it's updated after every task/phase. Phase 4 detail (auth, shopping
-> lists, admin panel, localization) lives in **[PHASE_4_PLAN.md](PHASE_4_PLAN.md)**.
-> Day-to-day changelog with technical detail is in **[CLAUDE.md](CLAUDE.md)**.
+> current, actively-maintained day-by-day changelog with full technical
+> detail, read **[CLAUDE.md](CLAUDE.md)** first (entries 24-29 cover
+> everything below). Phase 4 detail (auth, shopping lists, admin panel,
+> localization) lives in **[PHASE_4_PLAN.md](PHASE_4_PLAN.md)**.
 
 ---
 
-## 🏆 Completion Summary
+## 🏆 Phase 5: Multi-country (ME + UA) — ✅ COMPLETE (2026-08-29 → 2026-08-30)
+
+The project (and its folder) was renamed **Shop Price Online**. It's no
+longer Montenegro-only:
+
+- **Country selector** (ME/UA) on the site header and in the admin store
+  form - `GET /countries`, `stores.country` field, all matrix endpoints take
+  a `country` param. Details: CLAUDE.md #25.
+- **4 real, live Ukrainian scrapers**: Novus, Varus, Сільпо, Фора - all
+  Playwright-driven (plain HTTP gets blocked, likely TLS fingerprinting).
+  АТБ is written (`atb_scraper.py`) but **not registered** - it sits behind
+  a genuine Cloudflare managed challenge that beat every approach tried
+  (`navigator.webdriver` patch, headed mode, real Chrome via
+  `channel="chrome"`). Коло has no online price catalog at all - can't be
+  scraped, period. Details: CLAUDE.md #26-27.
+- **Cross-store product matching was mostly broken, then fixed twice**:
+  (1) category was part of the matching key, and Novus's own "Фрукти та
+  овочі" combined category never matched Сільпо/Varus/Фора's split
+  categories - fixed by splitting it client-side by Ukrainian keyword;
+  (2) the unit-stripping regex was ASCII-only, so Cyrillic "кг"/"г"/"л"
+  suffixes were never stripped, defeating exact-name matching even for
+  identical products; (3) different stores use different Ukrainian words
+  for the same item (томат vs помідор, лосось vs сьомга, confirmed by
+  manually browsing all 5 stores' category pages) - added a synonym
+  normalization pass. Multi-store matches went from ~5 to 30-44 out of
+  ~750-850 products. Details: CLAUDE.md #28-29.
+- **Promo highlighting**: discounted items get a distinct green highlight
+  independent of whether they're also the cheapest, using `old_price`/
+  `is_promo` fields added to the scraper pipeline.
+- **UX**: rows sorted so genuine multi-store comparisons float to the top
+  of each category instead of being buried among single-store listings
+  (still the majority - independent retailers mostly carry different
+  specific brands/SKUs, not a shared catalog, unlike Montenegro's
+  cijene.me aggregator).
+- **Production outage found and fixed along the way**: an orphaned
+  `next-server` process (unrelated to this phase, pre-existing) was
+  blocking the frontend's port; root-caused to a missing
+  `stopasgroup`/`killasgroup` in the supervisor config and fixed
+  permanently. Also fixed a broken `cloudflare-warp` apt source on the VPS
+  that blocked installing Playwright's system dependencies.
+
+## 🏆 Completion Summary (Montenegro-only phases, historical)
 
 ### Phase 0-3: Foundation, scrapers POC, frontend integration ✅ COMPLETE (2026-06-16 → 2026-07-02)
 Docker Compose scaffold, Instagram OCR-based scraper POC, mock store scrapers
