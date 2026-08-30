@@ -136,6 +136,20 @@ class VarusScraper(BaseScraper):
         if price is None:
             return None
 
+        unit = item.get("unit")
+        # Weighed meat/deli/cheese cards explicitly label the price "за 100 г"
+        # (per 100g) instead of "за 1 кг" like every other store - found by
+        # comparing a Varus rib price (~15-25 грн) against Novus/Сільпо's for
+        # the exact same cut (~200-300 грн) after matching started merging
+        # them: it wasn't a mismatch, Varus's raw number is just 1/10th of
+        # the per-kg price. Scale up so cross-store comparisons are apples-
+        # to-apples instead of making Varus look ~10x cheaper than it is.
+        if unit and re.search(r'\b100\s*г\b', unit, re.IGNORECASE):
+            price *= 10
+            if old_price is not None:
+                old_price *= 10
+            unit = "за 1 кг"
+
         href = item.get("href") or ""
         url = href if href.startswith("http") else f"{self.base_url}{href}"
 
@@ -147,7 +161,7 @@ class VarusScraper(BaseScraper):
             source="Varus",
             category=category,
             image_url=item.get("img"),
-            unit=item.get("unit"),
+            unit=unit,
         )
 
     def _parse_number(self, text: str) -> Optional[float]:
