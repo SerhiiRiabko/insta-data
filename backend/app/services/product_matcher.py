@@ -102,8 +102,44 @@ class ProductMatcherService:
     # safe to drop entirely rather than substitute, since keeping them just
     # adds noise that blocks otherwise-identical names from matching (e.g.
     # "Яблуко Гала" vs "Яблуко Гала вагове" - same product either way).
+    #
+    # "напій"/"безалкогольний"/the Pepsi-brand line: user asked "чому пепсі
+    # тільки в одному магазині" - every store phrases the same plain Pepsi
+    # differently ("Напій газований Pepsi" / "Напій Pepsi сильногазований" /
+    # "Напій Pepsi Пепсі-Кола безалкогольний сильногазований"), so none of
+    # them shared an identical remaining word set even with order-
+    # insensitive matching. These two never distinguish one drink from
+    # another regardless of product type, so they're always dropped.
     FILLER_WORDS_RE = re.compile(
-        r'\b(ваговий|вагова|вагове|вагові|фасований|фасована|фасоване|фасовані)\b',
+        r'\b(ваговий|вагова|вагове|вагові|фасований|фасована|фасоване|фасовані'
+        r'|напій|напої|безалкогольний|безалкогольна|безалкогольне|безалкогольні'
+        # Cyrillic brand name repeated alongside the Latin one that's
+        # already in virtually every real listing ("Напій Pepsi Пепсі-
+        # Кола безалкогольний...") - dropped as pure redundant repetition
+        # rather than substituted (substituting would create a *second*
+        # "pepsi" token instead of matching the single one everyone else
+        # has).
+        r'|пепсі-?кол\w*|пепсі\w*)\b',
+        re.IGNORECASE,
+    )
+
+    # Carbonation words ("газований"/"сильногазований"/...) are NOT always
+    # noise the way the words above are: for bottled water specifically,
+    # still-vs-sparkling is a real, often price-different distinction (e.g.
+    # "Вода Моршинська негазована" vs "...сильногазована" are genuinely
+    # different SKUs) - stripping it there would wrongly merge them. For
+    # everything else (soda, juice) it's just redundant ("сильногазований"
+    # for a cola tells you nothing another cola listing doesn't already
+    # imply), and different stores don't even use the same intensity word
+    # for what's the same product, so it blocks matching instead of
+    # describing a real difference. Only stripped when "вод" isn't in the
+    # name (see _strip_filler_words) - a crude but effective proxy for
+    # "is this water".
+    CARBONATION_WORDS_RE = re.compile(
+        r'\b(газований|газована|газоване|газовані'
+        r'|сильногазований|сильногазована|сильногазоване|сильногазовані'
+        r'|слабогазований|слабогазована|слабогазоване|слабогазовані'
+        r'|негазований|негазована|негазоване|негазовані)\b',
         re.IGNORECASE,
     )
 
@@ -322,8 +358,11 @@ class ProductMatcherService:
 
     def _strip_filler_words(self, name: str) -> str:
         """Drop sale-format words (see FILLER_WORDS_RE) and collapse the
-        resulting double spaces."""
+        resulting double spaces. Carbonation words are only dropped for
+        non-water products - see CARBONATION_WORDS_RE."""
         name = self.FILLER_WORDS_RE.sub('', name)
+        if 'вод' not in name.lower():
+            name = self.CARBONATION_WORDS_RE.sub('', name)
         return re.sub(r'\s+', ' ', name).strip()
 
     def _extract_name_and_unit(self, name: str) -> Tuple[str, str]:
