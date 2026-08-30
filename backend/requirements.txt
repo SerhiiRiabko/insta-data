@@ -41,6 +41,13 @@ resend==2.4.0
 playwright==1.40.0
 beautifulsoup4==4.12.2
 requests==2.31.0
+# ATB-only: Cloudflare blocks every Playwright config (see
+# scrapers/atb_scraper.py) but a real headed Chrome via undetected-
+# chromedriver passes. setuptools<81 is needed because undetected-
+# chromedriver still imports the removed stdlib `distutils` module.
+setuptools<81
+selenium==4.48.0
+undetected-chromedriver==3.5.5
 aiohttp==3.9.1
 
 # 📊 Data Processing

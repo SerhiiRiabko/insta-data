@@ -46,16 +46,19 @@ class ScraperOrchestrator:
         except Exception as e:
             logger.error(f"Failed to load Instagram scraper: {e}")
 
-        # АТБ scraper (atb_scraper.py) intentionally NOT registered: its site
-        # sits behind a Cloudflare managed challenge that blocks Playwright
-        # automation outright - confirmed with navigator.webdriver patched,
-        # headed mode, AND the real installed Chrome via channel="chrome",
-        # none of which cleared the challenge even after 18s. This needs a
-        # dedicated stealth/anti-detect solution (e.g. playwright-stealth or
-        # a paid unlocker API), which is a separate, bigger piece of work -
-        # left disabled rather than burning ~20s/category on every scrape
-        # for nothing. The scraper code itself is ready to register once a
-        # working bypass exists.
+        try:
+            from app.services.scrapers.atb_scraper import AtbScraper
+            # Cloudflare blocks every Playwright config tried (see
+            # atb_scraper.py docstring), but a real *headed* Chrome via
+            # undetected-chromedriver passes - runs against a permanent
+            # virtual display (Xvfb :99, see xvfb.conf) since the VPS has
+            # no physical one. Selenium is sync, so this scraper offloads
+            # to a worker thread and is noticeably slower than the
+            # Playwright-based ones (~10s/category vs ~3s).
+            self.scrapers["atb"] = AtbScraper()
+            self.scraper_country["atb"] = "UA"
+        except Exception as e:
+            logger.error(f"Failed to load АТБ scraper: {e}")
 
         try:
             from app.services.scrapers.silpo_scraper import SilpoScraper
