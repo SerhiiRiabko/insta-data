@@ -1,18 +1,65 @@
 # 📊 Shop Price Online Project Status
 
-**Last Updated:** 2026-08-30
+**Last Updated:** 2026-08-31
 **Status:** 🟢 DEPLOYED — http://138.199.204.107:3010 (ME + UA, multi-country)
 **Version:** 1.1.0 (renamed from Insta-Data / Monte-Shop-Price on 2026-08-29)
 
 > ⚠️ **This file is a point-in-time snapshot, updated occasionally.** For the
 > current, actively-maintained day-by-day changelog with full technical
-> detail, read **[CLAUDE.md](CLAUDE.md)** first (entries 24-29 cover
-> everything below). Phase 4 detail (auth, shopping lists, admin panel,
-> localization) lives in **[PHASE_4_PLAN.md](PHASE_4_PLAN.md)**.
+> detail, read **[CLAUDE.md](CLAUDE.md)** first (entries 24-38 cover
+> everything below, including everything in the "Phase 5" section right
+> below that's now out of date - see the correction note under it). Phase 4
+> detail (auth, shopping lists, admin panel, localization) lives in
+> **[PHASE_4_PLAN.md](PHASE_4_PLAN.md)**.
+
+---
+
+## 🏆 Phase 6: Deep UA coverage, real АТБ automation, Коло data (2026-08-30 → 2026-08-31)
+
+Everything below **supersedes specific claims in "Phase 5" further down**
+(kept as-is for its own historical accuracy, not edited) - see CLAUDE.md
+#30-38 for full detail on each:
+
+- **АТБ is now a real, registered, automated scraper**, not "written but
+  disabled". Every Playwright approach (plain, stealth JS patch,
+  `patchright`) still gets blocked by Cloudflare, but `undetected-
+  chromedriver` in headed mode passes reliably - runs against a permanent
+  virtual display (`Xvfb :99`) since the VPS has no real one. #32-33.
+- **Сільпо can get rate-limited by the site itself** after heavy scraping
+  and occasionally needs a manual data bridge
+  (`scripts/merge_silpo_manual.py`) - not a code bug, confirmed by the
+  same category pages loading fine from a different IP. #32, #36.
+- **Коло has a tiny (7-product) manually-collected price set**
+  (`scripts/merge_kolo_manual.py`) sourced from a third-party site's
+  scanned promo images (not extractable text, not automatable without
+  OCR) - still no real online catalog anywhere, confirmed on 4 separate
+  sources across the session. #38.
+- **6 new product categories per store**: Алкоголь, Дитячі товари,
+  Особиста гігієна, Побутова хімія, Зоотовари, Яйця (split out of
+  Молочка) - previously every scraper only covered food. #33-35.
+- **Matching got a lot more aggressive** (by explicit user request, a
+  deliberate precision-for-coverage trade-off): Овочі/Фрукти/М'ясо і риба
+  match on core name only, ignoring variety/brand; produce singular/
+  plural normalized (огірок/огірки etc); drinks lost their filler words
+  ("напій"/"газований"/...) so e.g. Pepsi matches across stores - except
+  carbonation words are kept for anything with "вод" in the name, so
+  water's negazovana/gazovana stays correctly distinct. #31, #35, #37.
+- **`/matrix-cached` was silently truncating UA at 2000 products** (~16%
+  of the real 2371-item catalog) - raised to 10000. #36.
+- **UA never had an automatic weekly refresh at all** (the scheduled job
+  was hardcoded ME-only) - fixed and moved to Mon 03:00 (ME) / 03:15 (UA)
+  Europe/Kyiv. #36.
+- **End-of-session state**: ~3100+ UA products, 150+ cross-store
+  comparisons, 6 stores with at least some data (Коло's being nominal).
 
 ---
 
 ## 🏆 Phase 5: Multi-country (ME + UA) — ✅ COMPLETE (2026-08-29 → 2026-08-30)
+
+> ⚠️ Historical - written 2026-08-30, several claims below (АТБ "not
+> registered", Коло "can't be scraped, period", match counts) are now out
+> of date. See "Phase 6" above for what actually changed. Left unedited
+> below as an accurate record of what was true at the time.
 
 The project (and its folder) was renamed **Shop Price Online**. It's no
 longer Montenegro-only:

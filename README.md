@@ -2,7 +2,7 @@
 
 [![Status](https://img.shields.io/badge/Status-Live%20in%20Production-brightgreen)](http://138.199.204.107:3010/ukr)
 
-**Real-time grocery price comparison across two countries: Montenegro (4 chains) and Ukraine (4 live chains, growing).**
+**Real-time grocery price comparison across two countries: Montenegro (4 chains) and Ukraine (6 chains: 5 with data, 1 with none available anywhere).**
 
 Live: **http://138.199.204.107:3010/ukr** (also `/rus /mne /srb /bos /eng`)
 Admin: **http://138.199.204.107:3010/ukr/admin**
@@ -23,10 +23,19 @@ A price-comparison table, per country:
 - **🇲🇪 Montenegro** — Aroma, Voli, HDL, IDEA. Prices come from **cijene.me**,
   a third-party aggregator that already covers all 4 chains from one scrape
   (`cijene_scraper.py`).
-- **🇺🇦 Ukraine** — Novus, Varus, Сільпо, Фора, each scraped independently
-  (no shared aggregator exists for Ukraine). АТБ is written but disabled
-  (blocked by a Cloudflare managed challenge — see CLAUDE.md #26). Коло has
-  no online catalog at all, so it can't be scraped.
+- **🇺🇦 Ukraine** — Novus, Varus, Сільпо, Фора, АТБ, each scraped
+  independently (no shared aggregator exists for Ukraine). АТБ's
+  Cloudflare challenge blocks every automated *headless* approach tried,
+  but a real *headed* Chrome (via `undetected-chromedriver`/Selenium)
+  passes it reliably — runs against a permanent virtual display (`Xvfb`)
+  on the VPS, see CLAUDE.md #33. Сільпо's own automated scraper can get
+  rate-limited by the site itself after heavy use and occasionally needs
+  a manual data bridge (`scripts/merge_silpo_manual.py`) — see CLAUDE.md
+  #32/#36. Коло has no online catalog anywhere (not on its own site, not
+  on two third-party flyer aggregators checked) — the handful of prices
+  it has come from manually reading promo images off a third-party site
+  and are not automatable without adding OCR (`scripts/merge_kolo_manual.py`,
+  CLAUDE.md #38).
 
 For each product, the table shows every store's price side by side, with:
 - the cheapest cell highlighted green
@@ -72,8 +81,14 @@ FastAPI backend  (supervisord: insta-data-backend, :8010)
         ├── Playwright: varus_scraper.py   → UA: Varus
         ├── Playwright: fora_scraper.py    → UA: Фора
         ├── Playwright: novus_scraper.py   → UA: Novus
-        └── Playwright: atb_scraper.py     → UA: АТБ (written, NOT registered - Cloudflare)
+        └── Selenium (undetected-chromedriver + Xvfb :99) → UA: АТБ
 ```
+
+Коло has no scraper at all (nothing to scrape - see below); its handful of
+prices are loaded straight into MongoDB by a one-off script
+(`scripts/merge_kolo_manual.py`), same as Сільпо's occasional manual
+top-up (`scripts/merge_silpo_manual.py`) and how АТБ's data was bridged
+before its real scraper existed (`scripts/merge_atb_manual.py`).
 
 - **No Docker in production.** `docker-compose.yml` exists (useful for a
   from-scratch local Mongo/Postgres if you want it) but the live deployment
@@ -89,10 +104,16 @@ FastAPI backend  (supervisord: insta-data-backend, :8010)
 - **Playwright, not aiohttp, for the Ukrainian scrapers.** A plain HTTP GET
   gets blocked (HTTP 403, likely TLS/JA3 fingerprinting) on Сільпо/Varus/
   Фора/Novus even with realistic headers; a real Playwright-driven
-  Chromium passes. АТБ needs Playwright too, but its Cloudflare managed
-  challenge blocks Playwright as well (tried: `navigator.webdriver` patch,
-  headed mode, real installed Chrome via `channel="chrome"` — none
-  cleared it) — that scraper is written but not registered.
+  Chromium passes.
+- **АТБ is Selenium, not Playwright** — every Playwright config tried
+  (plain, `navigator.webdriver` patch, a full stealth init-script,
+  `patchright` — a CDP-patched fork built specifically to evade this kind
+  of detection) gets blocked by Cloudflare within a few seconds, headless
+  or headed, consistent with a TLS/network-level check rather than a JS
+  challenge. `undetected-chromedriver` in *headed* mode passes reliably
+  — headless alone is apparently still a detectable signal. The VPS has
+  no physical display, so it runs against a permanent virtual one
+  (`Xvfb :99`, its own supervisord service) instead. See CLAUDE.md #32–33.
 
 ---
 
@@ -113,9 +134,10 @@ FastAPI backend  (supervisord: insta-data-backend, :8010)
 ## 🛠️ Tech stack (as actually running)
 
 **Backend:** FastAPI (async) · Python · MongoDB (Motor/async driver) ·
-Playwright (Chromium) + aiohttp + BeautifulSoup4 · APScheduler (weekly ME
-refresh) · passlib/bcrypt (auth) · Resend (magic-link email, reused from a
-sibling project)
+Playwright (Chromium, most UA scrapers) + Selenium/undetected-chromedriver
+(АТБ only, via Xvfb) + aiohttp + BeautifulSoup4 · APScheduler (weekly
+refresh, both ME Mon 03:00 and UA Mon 03:15 Europe/Kyiv) · passlib/bcrypt
+(auth) · Resend (magic-link email, reused from a sibling project)
 
 **Frontend:** Next.js 15 + React 19 · Tailwind CSS 4 · next-intl (6
 locales) · Axios
@@ -151,4 +173,4 @@ but the local-dev mechanics are still accurate).
 
 ---
 
-**Last Updated:** 2026-08-30
+**Last Updated:** 2026-08-31
