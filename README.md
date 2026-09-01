@@ -174,3 +174,12 @@ but the local-dev mechanics are still accurate).
 ---
 
 **Last Updated:** 2026-08-31
+
+## Server / Infrastructure
+
+- **Hosting:** Contabo Cloud VPS (migrated from Hetzner on 2026-09-01)
+- **IP:** 95.111.240.154
+- **OS:** Ubuntu 24.04
+- **Process manager:** pm2 (`pm2 list`, `pm2 logs <name>`)
+- **Reverse proxy:** nginx
+- **Git remote:** SSH — `git@github.com:SerhiiRiabko/<repo>.git`, authenticated via deploy key `~/.ssh/id_ed25519` on the server (no tokens in the remote URL)
