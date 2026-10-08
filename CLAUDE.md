@@ -4,6 +4,8 @@
 
 Цей файл надає контекст Claude Code при роботі з цим проектом.
 
+> **Сервер (з 2026-09-01):** Contabo **95.111.240.154**, pm2 + nginx, код у `/home/deploy/apps/insta-data`. Сайт: http://95.111.240.154/insta-data/ukr · адмінка: http://95.111.240.154/insta-data/ukr/admin · API: http://95.111.240.154/insta-data-api/docs. Старі адреси Hetzner (138.199.204.107) у записах нижче більше не працюють.
+
 ---
 
 ## 📋 Проект Insta-data
@@ -156,7 +158,7 @@ insta-data/
 ### Setup
 ```bash
 # 1. Clone & setup
-cd c:/Users/Serhii/OneDrive/Рабочий\ стол/Insta-data
+cd D:/Claude Projects/Insta-data
 cp .env.example .env
 
 # 2. Edit .env з реальними credentials

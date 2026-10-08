@@ -1,5 +1,7 @@
 # 🚀 Production Deployment Guide
 
+> ⚠️ **Застаріло:** з 2026-09-01 проект працює на сервері Contabo **95.111.240.154** (pm2 + nginx), не на Hetzner. Сайт: http://95.111.240.154/insta-data/ukr, адмінка: http://95.111.240.154/insta-data/ukr/admin, API: http://95.111.240.154/insta-data-api/docs. Код на сервері: `/home/deploy/apps/insta-data`; SSH: `ssh -i "C:/Users/Serhii/.ssh/contabo" root@95.111.240.154`. Нижче — інструкція для старого сервера Hetzner, лишена для історії.
+
 **Target:** Hetzner VPS (root@138.199.204.107)  
 **OS:** Linux (Ubuntu 20.04+)  
 **Time Required:** ~1 hour

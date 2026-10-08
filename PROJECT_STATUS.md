@@ -1,7 +1,7 @@
 # 📊 Shop Price Online Project Status
 
 **Last Updated:** 2026-08-31
-**Status:** 🟢 DEPLOYED — http://138.199.204.107:3010 (ME + UA, multi-country)
+**Status:** 🟢 DEPLOYED — http://95.111.240.154/insta-data/ukr (ME + UA, multi-country). Server: Contabo 95.111.240.154 (moved from Hetzner 138.199.204.107 on 2026-09-01)
 **Version:** 1.1.0 (renamed from Insta-Data / Monte-Shop-Price on 2026-08-29)
 
 > ⚠️ **This file is a point-in-time snapshot, updated occasionally.** For the
@@ -199,6 +199,8 @@ Full detail: `PROJECT_MAP.md` → "Bugfix (2026-07-17, 2 частини)" and
 ---
 
 ## 🚀 Deployment Status
+
+> **Moved 2026-09-01** to Contabo 95.111.240.154 (pm2 + nginx): site http://95.111.240.154/insta-data/ukr, admin http://95.111.240.154/insta-data/ukr/admin, API http://95.111.240.154/insta-data-api/docs. The Hetzner addresses below no longer work.
 
 **Deployed (2026-07-17).** Live at http://138.199.204.107:3010 (admin:
 http://138.199.204.107:3010/ukr/admin), backend at
@@ -507,7 +509,7 @@ MIT License - See LICENSE file
 
 ---
 
-**Project Status: 🟢 DEPLOYED — http://138.199.204.107:3010 (feature-complete for Phase 4.0-4.6)**
+**Project Status: 🟢 DEPLOYED — http://95.111.240.154/insta-data/ukr (feature-complete for Phase 4.0-4.6)**
 
 Real cijene.me scraping | 6 locales | Accounts + shopping lists + admin panel | Live, no domain/SSL yet
 
