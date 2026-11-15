@@ -148,7 +148,9 @@ async def _translate_name_ai(name: str, target_locale: str) -> Optional[str]:
                     "model": settings.groq_model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.2,
-                    "max_tokens": 60,
+                    # gpt-oss reasons before answering; its reasoning counts
+                    # toward max_tokens, so a title-sized cap returns nothing.
+                    "max_tokens": 1500,
                 },
             )
             response.raise_for_status()
@@ -195,13 +197,32 @@ def resolve_display_name(doc: dict, locale: str) -> str:
 
 BATCH_SYSTEM_PROMPT = (
     "You translate grocery and household product names for a price-comparison "
-    "website, from {source} to {target}. Rules: keep brand and manufacturer "
-    "names, product-line names, numbers, percentages, weights and units "
-    "exactly as written (do not transliterate brands); translate only the "
-    "generic product words and descriptors; keep it a short product title, "
-    "not a sentence. Return one translation per input line, keyed by its "
-    "number."
+    "website, from {source} to {target}. Rules: never translate brand, "
+    "manufacturer or product-line names - keep them as written{script_rule} "
+    "Keep numbers and percentages as they are. Translate the generic product "
+    "words and descriptors; keep it a short product title, not a sentence. "
+    "Return one translation per input line, keyed by its number."
 )
+
+# Without the per-alphabet rule, models either left Cyrillic brands and
+# units inside Latin-alphabet translations ("Mlijeko «Галичина» 900г") or,
+# told to always use Latin units, wrote "900g" into Russian.
+LATIN_SCRIPT_LOCALES = {"eng", "mne", "srb", "bos"}
+
+
+def _batch_system_prompt(source: str, target: str) -> str:
+    if target in LATIN_SCRIPT_LOCALES:
+        rule = (
+            ", but a brand written in Cyrillic must be transliterated into Latin "
+            "letters. The whole result must use the Latin alphabet, units too "
+            "(г->g, кг->kg, л->l, мл->ml)."
+        )
+    else:
+        rule = (
+            ", but a brand written in Latin letters stays in Latin letters. "
+            "Units stay in Cyrillic (г, кг, л, мл)."
+        )
+    return BATCH_SYSTEM_PROMPT.format(source=LOCALE_NAMES[source], target=LOCALE_NAMES[target], script_rule=rule)
 
 
 class _BatchItem(BaseModel):
@@ -229,7 +250,7 @@ def _collect(names: list[str], pairs: list[tuple[int, str]]) -> dict[str, str]:
 async def _batch_groq(names: list[str], source: str, target: str) -> dict[str, str]:
     if not settings.groq_api_key:
         return {}
-    system = BATCH_SYSTEM_PROMPT.format(source=LOCALE_NAMES[source], target=LOCALE_NAMES[target])
+    system = _batch_system_prompt(source, target)
     user = (
         'Reply with only a JSON object {"translations": [{"n": 1, "text": "..."}, ...]}.\n\n'
         + _numbered(names)
@@ -268,7 +289,7 @@ async def _batch_claude(names: list[str], source: str, target: str) -> dict[str,
         response = await client.messages.parse(
             model=settings.anthropic_model,
             max_tokens=8000,
-            system=BATCH_SYSTEM_PROMPT.format(source=LOCALE_NAMES[source], target=LOCALE_NAMES[target]),
+            system=_batch_system_prompt(source, target),
             messages=[{"role": "user", "content": _numbered(names)}],
             output_config={"effort": "low"},
             output_format=_BatchOut,
