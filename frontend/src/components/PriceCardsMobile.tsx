@@ -27,6 +27,7 @@ import {
   translations,
   formatPrice,
   groupByCategory,
+  categoryLabel,
   withCheapest,
 } from '@/lib/productMatrix';
 
@@ -57,11 +58,13 @@ export function PriceCardsMobile({
   const groups = hasCategories
     ? groupByCategory(productsWithCheapest, t.other)
     : [{ name: '', rows: productsWithCheapest }];
+  // Free plan: one store - no comparison strip, no "cheapest" wording.
+  const singleStore = stores.length === 1;
 
   return (
     <div className="md:hidden w-full">
-      {/* Store chip strip — horizontally scrollable */}
-      <div className="flex gap-2 overflow-x-auto pb-1 mb-4 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+      {/* Store chip strip — horizontally scrollable (the free plan's store picker replaces it) */}
+      <div className={`${singleStore ? 'hidden' : 'flex'} gap-2 overflow-x-auto pb-1 mb-4 -mx-1 px-1`} style={{ scrollbarWidth: 'none' }}>
         {stores.map((store) => (
           <div
             key={store.name}
@@ -136,7 +139,7 @@ export function PriceCardsMobile({
                 zIndex: 10,
               }}
             >
-              {group.name} · {group.rows.length}
+              {categoryLabel(group.name, lang)} · {group.rows.length}
             </div>
           )}
           {group.rows.map((product, idx) => (
@@ -183,13 +186,13 @@ export function PriceCardsMobile({
                     className="text-[10px] uppercase font-medium mt-0.5"
                     style={{ color: '#7d9a8d', letterSpacing: '0.04em' }}
                   >
-                    {t.cheapest} · {product.cheapestStoreName}
+                    {singleStore ? product.cheapestStoreName : `${t.cheapest} · ${product.cheapestStoreName}`}
                   </div>
                 </div>
               </div>
 
               {/* Per-store mini price strip */}
-              <div className="flex">
+              <div className={singleStore ? 'hidden' : 'flex'}>
                 {stores.map((store, i) => {
                   const price = product.prices[i];
                   const isCheapest = i === product.cheapestIndex && price !== null;

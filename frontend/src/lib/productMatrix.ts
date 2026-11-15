@@ -166,6 +166,37 @@ export const CATEGORY_ORDER = [
   'Інше',
 ];
 
+// The backend always classifies into these Ukrainian labels; this is only
+// the display translation (Ukrainian shows the key itself).
+const CATEGORY_LABELS: Record<string, { rus: string; eng: string; mne: string }> = {
+  'Овочі': { rus: 'Овощи', eng: 'Vegetables', mne: 'Povrće' },
+  'Фрукти': { rus: 'Фрукты', eng: 'Fruit', mne: 'Voće' },
+  'Фрукти та овочі': { rus: 'Фрукты и овощи', eng: 'Fruit & vegetables', mne: 'Voće i povrće' },
+  'Молочка': { rus: 'Молочные продукты', eng: 'Dairy', mne: 'Mliječni proizvodi' },
+  'Яйця': { rus: 'Яйца', eng: 'Eggs', mne: 'Jaja' },
+  'Сири': { rus: 'Сыры', eng: 'Cheese', mne: 'Sirevi' },
+  'Хлібобулочні вироби': { rus: 'Хлеб и выпечка', eng: 'Bread & bakery', mne: 'Hljeb i peciva' },
+  'Бакалія': { rus: 'Бакалея', eng: 'Pantry', mne: 'Bakalija' },
+  'Консервація': { rus: 'Консервы', eng: 'Canned food', mne: 'Konzervirana hrana' },
+  'Заморожені продукти': { rus: 'Замороженные продукты', eng: 'Frozen food', mne: 'Smrznuta hrana' },
+  'Дитячі товари': { rus: 'Детские товары', eng: 'Baby & kids', mne: 'Dječiji proizvodi' },
+  "М'ясо і риба": { rus: 'Мясо и рыба', eng: 'Meat & fish', mne: 'Meso i riba' },
+  'Солодощі та снеки': { rus: 'Сладости и снеки', eng: 'Sweets & snacks', mne: 'Slatkiši i grickalice' },
+  'Напої': { rus: 'Напитки', eng: 'Drinks', mne: 'Pića' },
+  'Алкоголь': { rus: 'Алкоголь', eng: 'Alcohol', mne: 'Alkohol' },
+  'Особиста гігієна': { rus: 'Личная гигиена', eng: 'Personal care', mne: 'Lična higijena' },
+  'Побутова хімія': { rus: 'Бытовая химия', eng: 'Household', mne: 'Kućna hemija' },
+  'Зоотовари': { rus: 'Зоотовары', eng: 'Pet supplies', mne: 'Za ljubimce' },
+  'Акції': { rus: 'Акции', eng: 'Promotions', mne: 'Akcije' },
+  'Інше': { rus: 'Другое', eng: 'Other', mne: 'Ostalo' },
+};
+
+export function categoryLabel(name: string, lang: Lang): string {
+  const labels = CATEGORY_LABELS[name];
+  if (!labels || lang === 'ukr') return name;
+  return lang === 'rus' ? labels.rus : lang === 'eng' ? labels.eng : labels.mne;
+}
+
 export interface CategoryGroup<T> {
   name: string;
   rows: T[];

@@ -32,6 +32,7 @@ import {
   translations,
   formatPrice,
   groupByCategory,
+  categoryLabel,
   withCheapest,
 } from '@/lib/productMatrix';
 
@@ -64,7 +65,9 @@ export function PriceMatrixLanding({
     ? groupByCategory(productsWithCheapest, t.other)
     : [{ name: '', rows: productsWithCheapest }];
 
-  const colSpan = stores.length + 2; // product column + cheapest column
+  // Free plan shows a single store - a "cheapest" column would only repeat it.
+  const showCheapest = stores.length > 1;
+  const colSpan = stores.length + (showCheapest ? 2 : 1); // product column (+ cheapest column)
 
   return (
     <div className="hidden md:block w-full bg-white backdrop-blur-md rounded-3xl border border-gray-300 shadow-2xl overflow-hidden" style={{ boxShadow: '0 28px 64px -30px rgba(6,78,59,0.4)' }}>
@@ -204,7 +207,7 @@ export function PriceMatrixLanding({
               ))}
 
               {/* Cheapest Column */}
-              <th
+              {showCheapest && <th
                 style={{
                   textAlign: 'right',
                   paddingLeft: '10px',
@@ -222,7 +225,7 @@ export function PriceMatrixLanding({
                 }}
               >
                 {t.cheapest}
-              </th>
+              </th>}
             </tr>
           </thead>
 
@@ -249,7 +252,7 @@ export function PriceMatrixLanding({
                         borderBottom: '1px solid #d9e7df',
                       }}
                     >
-                      {group.name} · {group.rows.length}
+                      {categoryLabel(group.name, lang)} · {group.rows.length}
                     </td>
                   </tr>
                 )}
@@ -336,7 +339,7 @@ export function PriceMatrixLanding({
                 })}
 
                 {/* Cheapest Summary Cell */}
-                <td
+                {showCheapest && <td
                   style={{
                     textAlign: 'right',
                     paddingLeft: '10px',
@@ -360,7 +363,7 @@ export function PriceMatrixLanding({
                   ) : (
                     <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#bbb' }}>—</div>
                   )}
-                </td>
+                </td>}
               </tr>
                 ))}
               </Fragment>

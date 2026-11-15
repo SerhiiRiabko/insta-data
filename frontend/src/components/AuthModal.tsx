@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { authAPI } from '@/lib/api';
+import { useRef, useState } from 'react';
+import { authAPI, type CurrentUser } from '@/lib/api';
+import { at } from '@/lib/accountText';
 import { ALL_LANGS, type Lang } from '@/lib/productMatrix';
+import { openPendingTab, sendTabTo, useTelegramPoll } from '@/lib/telegramFlow';
 
 type Method = 'magic' | 'password';
 type PasswordMode = 'login' | 'register';
@@ -10,7 +12,7 @@ type PasswordMode = 'login' | 'register';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAuthenticated: (user: { id: string; email: string; tier: string }) => void;
+  onAuthenticated: (user: CurrentUser) => void;
   lang: Lang;
 }
 
@@ -135,6 +137,36 @@ export function AuthModal({ isOpen, onClose, onAuthenticated, lang }: AuthModalP
   const [error, setError] = useState<string | null>(null);
   const [linkSent, setLinkSent] = useState(false);
 
+  // Telegram login: open the bot with a one-time token, poll until the user
+  // confirms there - the poll that sees the confirmation gets the cookie.
+  const telegramToken = useRef<string | null>(null);
+  const [botUrl, setBotUrl] = useState<string | null>(null);
+  const telegram = useTelegramPoll(async () => {
+    if (!telegramToken.current) return 'failed';
+    const res = await authAPI.telegramLoginStatus(telegramToken.current);
+    if (res.data.status === 'ok') {
+      onAuthenticated(res.data.user);
+      onClose();
+      return 'done';
+    }
+    return 'pending';
+  });
+
+  const startTelegramLogin = async () => {
+    const tab = openPendingTab();
+    setError(null);
+    try {
+      const res = await authAPI.telegramLogin(urlLocale() as Lang);
+      telegramToken.current = res.data.token;
+      setBotUrl(res.data.url);
+      sendTabTo(tab, res.data.url);
+      telegram.start();
+    } catch {
+      tab?.close();
+      setError(at(lang, 'error'));
+    }
+  };
+
   if (!isOpen) return null;
 
   const sendMagicLink = async (e: React.FormEvent) => {
@@ -176,6 +208,35 @@ export function AuthModal({ isOpen, onClose, onAuthenticated, lang }: AuthModalP
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl" aria-label="Close">
             ✕
           </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={startTelegramLogin}
+          disabled={telegram.state === 'waiting'}
+          className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+          style={{ backgroundColor: '#229ED9', color: 'white', border: 'none', cursor: telegram.state === 'waiting' ? 'default' : 'pointer' }}
+        >
+          <span aria-hidden="true">✈️</span> {at(lang, 'telegramLogin')}
+        </button>
+        {telegram.state === 'waiting' && (
+          <p className="text-xs mt-2 text-center" style={{ color: '#33524a' }}>
+            {at(lang, 'confirmLoginInTelegram')}{' '}
+            {botUrl && (
+              <a href={botUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#229ED9' }}>
+                {at(lang, 'openBotAgain')}
+              </a>
+            )}
+          </p>
+        )}
+        {telegram.state === 'expired' && (
+          <p className="text-xs mt-2 text-center text-red-600">{at(lang, 'expired')}</p>
+        )}
+
+        <div className="flex items-center gap-3 my-4 text-xs" style={{ color: '#a3b5ae' }}>
+          <span className="flex-1 h-px" style={{ backgroundColor: '#e3eee8' }} />
+          {at(lang, 'or')}
+          <span className="flex-1 h-px" style={{ backgroundColor: '#e3eee8' }} />
         </div>
 
         <div className="flex mb-5 rounded-lg overflow-hidden border" style={{ borderColor: '#e3eee8' }}>
