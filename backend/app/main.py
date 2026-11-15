@@ -45,6 +45,9 @@ async def lifespan(app: FastAPI):
             [("name", "text"), ("description", "text")],
             name="name_description_text",
         )
+        from app.services import list_service, telegram_accounts
+        await telegram_accounts.ensure_indexes()
+        await list_service.ensure_indexes()
     except Exception as e:
         logger.warning(f"⚠️ MongoDB not available: {e}")
 

@@ -28,10 +28,95 @@ import { ShoppingListModal } from './ShoppingListModal';
 import { StoresModal } from './StoresModal';
 import { AboutModal } from './AboutModal';
 import { AuthModal } from './AuthModal';
-import { productsAPI, authAPI, countriesAPI, type Country } from '@/lib/api';
-import { DEFAULT_STORES, ALL_LANGS, LANG_LABEL, type Lang } from '@/lib/productMatrix';
+import { AccountModal } from './AccountModal';
+import { PlansModal } from './PlansModal';
+import { productsAPI, authAPI, countriesAPI, subscriptionsAPI, type Access, type Country, type CurrentUser, type Plan } from '@/lib/api';
+import { at } from '@/lib/accountText';
+import { DEFAULT_STORES, ALL_LANGS, LANG_LABEL, type Lang, type MatrixStore } from '@/lib/productMatrix';
 
 const COUNTRY_STORAGE_KEY = 'shopPriceCountry';
+// Free plan's chosen store, remembered per country.
+const STORE_STORAGE_KEY = (country: Country) => `shopPriceStore:${country}`;
+
+function readStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // private mode / blocked storage - the choice just isn't remembered
+  }
+}
+
+/** Free plan: pick the one store to show + an offer to unlock comparison. */
+function FreeStoreBar({
+  lang,
+  stores,
+  selected,
+  onSelect,
+  onUnlock,
+  price,
+}: {
+  lang: Lang;
+  stores: MatrixStore[];
+  selected: string | null;
+  onSelect: (store: string) => void;
+  onUnlock: () => void;
+  price: { eur: number; stars: number } | null;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border mb-4 p-4" style={{ borderColor: '#e3eee8' }}>
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <span className="text-xs font-semibold uppercase mr-1" style={{ color: '#7d9a8d', letterSpacing: '0.05em' }}>
+          {at(lang, 'chooseStore')}
+        </span>
+        {stores.map((store) => {
+          const active = store.name === selected;
+          return (
+            <button
+              key={store.name}
+              onClick={() => onSelect(store.name)}
+              aria-pressed={active}
+              className="flex items-center gap-1.5 rounded-full py-1.5 pl-1.5 pr-3 text-xs font-semibold"
+              style={{
+                border: `1px solid ${active ? '#0b6e4f' : '#e3eee8'}`,
+                backgroundColor: active ? '#d8f3e3' : 'white',
+                color: '#0f1419',
+                cursor: 'pointer',
+              }}
+            >
+              <span
+                className="flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white"
+                style={{ backgroundColor: store.color }}
+              >
+                {store.initial}
+              </span>
+              {store.name}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl p-3" style={{ backgroundColor: '#fffaf0' }}>
+        <p className="text-sm flex-1 min-w-[14rem]" style={{ color: '#5c4a1a' }}>
+          🔓 {price ? at(lang, 'freeBanner', { eur: price.eur, stars: price.stars }) : at(lang, 'compareDesc')}
+        </p>
+        <button
+          onClick={onUnlock}
+          className="rounded-full text-sm font-semibold whitespace-nowrap"
+          style={{ padding: '8px 16px', backgroundColor: '#0b6e4f', color: 'white', border: 'none', cursor: 'pointer' }}
+        >
+          {at(lang, 'unlock')}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface CountryOption {
   code: Country;
@@ -212,9 +297,13 @@ function VariationA({
   loading,
   currentUser,
   onAuthClick,
-  onLogoutClick,
+  onAccountClick,
   searchQuery,
   onSearchQueryChange,
+  access,
+  onSelectStore,
+  onUnlock,
+  comparePrice,
 }: {
   lang: Lang;
   setLang: (lang: Lang) => void;
@@ -231,11 +320,15 @@ function VariationA({
   products: any[];
   stores: any[];
   loading: boolean;
-  currentUser: { id: string; email: string; tier: string } | null;
+  currentUser: CurrentUser | null;
   onAuthClick: () => void;
-  onLogoutClick: () => void;
+  onAccountClick: () => void;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  access: Access | null;
+  onSelectStore: (store: string) => void;
+  onUnlock: () => void;
+  comparePrice: { eur: number; stars: number } | null;
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -354,9 +447,9 @@ function VariationA({
         {/* Right: Auth + Language Selector + mobile menu toggle */}
         <div className="gap-1.5 min-[400px]:gap-2" style={{ display: 'flex', alignItems: 'center' }}>
           <button
-            onClick={currentUser ? onLogoutClick : onAuthClick}
-            title={currentUser ? currentUser.email : undefined}
-            aria-label={currentUser ? 'Log out' : 'Log in'}
+            onClick={currentUser ? onAccountClick : onAuthClick}
+            title={currentUser ? currentUser.email || currentUser.telegram?.username || undefined : undefined}
+            aria-label={currentUser ? 'Account' : 'Log in'}
             style={{
               width: '32px',
               height: '32px',
@@ -373,7 +466,9 @@ function VariationA({
               justifyContent: 'center',
             }}
           >
-            {currentUser ? currentUser.email[0].toUpperCase() : '👤'}
+            {currentUser
+              ? (currentUser.email || currentUser.telegram?.first_name || currentUser.telegram?.username || '?')[0].toUpperCase()
+              : '👤'}
           </button>
           <select
             value={country}
@@ -592,6 +687,16 @@ function VariationA({
         }}
       >
         <div style={{ width: '100%', maxWidth: '1400px' }}>
+          {access && !access.compare && (access.all_stores?.length ?? 0) > 1 && (
+            <FreeStoreBar
+              lang={lang}
+              stores={access.all_stores!}
+              selected={access.selected_store ?? null}
+              onSelect={onSelectStore}
+              onUnlock={onUnlock}
+              price={comparePrice}
+            />
+          )}
           {loading ? (
             <div
               style={{
@@ -711,13 +816,22 @@ export function LandingPageDesignBrief() {
   const [isStoresOpen, setIsStoresOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
 
-  // Accounts (Phase 4.2)
-  const [currentUser, setCurrentUser] = useState<{ id: string; email: string; tier: string } | null>(null);
+  // Accounts (Phase 4.2) + paid plans. `authChecked` gates the first matrix
+  // fetch so it's made with the session cookie already known - otherwise a
+  // paying user would see the free one-store view flash first.
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [plansHighlight, setPlansHighlight] = useState<Plan | null>(null);
+  const [comparePrice, setComparePrice] = useState<{ eur: number; stars: number } | null>(null);
 
   // Backend Integration (Phase 1)
   const [products, setProducts] = useState(MOCK_PRODUCTS);
   const [stores, setStores] = useState(MOCK_STORES);
+  const [access, setAccess] = useState<Access | null>(null);
+  // Free plan: which store's prices to show (null = the backend's default).
+  const [selectedStore, setSelectedStore] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -742,12 +856,13 @@ export function LandingPageDesignBrief() {
 
         try {
           const response = isManualRefresh
-            ? await productsAPI.priceMatrixLive(lang, country)
-            : await productsAPI.matrixCached(lang, country);
+            ? await productsAPI.priceMatrixLive(lang, country, selectedStore)
+            : await productsAPI.matrixCached(lang, country, selectedStore);
           const data = response.data;
 
           if (data && data.stores && data.products) {
             setStores(data.stores);
+            setAccess(data.access ?? null);
             setProducts(
               data.products.map((p: any) => ({
                 id: p.id,
@@ -767,11 +882,12 @@ export function LandingPageDesignBrief() {
         }
 
         // Fallback to old endpoint if the primary call fails
-        const response = await productsAPI.priceMatrix(lang, country);
+        const response = await productsAPI.priceMatrix(lang, country, selectedStore);
         const data = response.data;
 
         if (data && data.stores && data.products) {
           setStores(data.stores);
+          setAccess(data.access ?? null);
           setProducts(
             data.products.map((p: any) => ({
               id: p.id,
@@ -788,16 +904,33 @@ export function LandingPageDesignBrief() {
         setBusy(false);
       }
     },
-    [lang, country]
+    // currentUser's plan is part of the key: logging in / buying a plan
+    // must refetch (the backend decides one store vs. all stores).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lang, country, selectedStore, currentUser?.id, currentUser?.access.plan]
+  );
+
+  // The free plan's store choice is remembered per country.
+  useEffect(() => {
+    if (!countryReady) return;
+    setSelectedStore(readStorage(STORE_STORAGE_KEY(country)));
+  }, [country, countryReady]);
+
+  const onSelectStore = useCallback(
+    (store: string) => {
+      setSelectedStore(store);
+      writeStorage(STORE_STORAGE_KEY(country), store);
+    },
+    [country]
   );
 
   // Re-fetches whenever the URL locale or selected country changes. Waits
   // for countryReady so the very first fetch already uses the localStorage
   // country instead of the 'ME' default, avoiding a wrong-country flash.
   useEffect(() => {
-    if (!countryReady) return;
+    if (!countryReady || !authChecked) return;
     fetchMatrix();
-  }, [fetchMatrix, countryReady]);
+  }, [fetchMatrix, countryReady, authChecked]);
 
   // Pick up an existing session cookie (e.g. after a magic-link redirect,
   // or a returning visitor) - 401 just means "not logged in", not an error.
@@ -805,7 +938,21 @@ export function LandingPageDesignBrief() {
     authAPI
       .me()
       .then((res) => setCurrentUser(res.data))
-      .catch(() => setCurrentUser(null));
+      .catch(() => setCurrentUser(null))
+      .finally(() => setAuthChecked(true));
+    subscriptionsAPI
+      .plans()
+      .then((res) => {
+        const compare = res.data.plans.find((p: { id: string }) => p.id === 'compare');
+        if (compare) setComparePrice({ eur: compare.eur, stars: compare.stars });
+      })
+      .catch(() => setComparePrice(null));
+  }, []);
+
+  const openPlans = useCallback((plan: Plan) => {
+    setIsAccountOpen(false);
+    setIsProductsOpen(false);
+    setPlansHighlight(plan);
   }, []);
 
   const onRefreshPrices = useCallback(() => {
@@ -823,7 +970,9 @@ export function LandingPageDesignBrief() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
   const onAuthClick = useCallback(() => setIsAuthModalOpen(true), []);
+  const onAccountClick = useCallback(() => setIsAccountOpen(true), []);
   const onLogoutClick = useCallback(() => {
+    setIsAccountOpen(false);
     authAPI.logout().finally(() => setCurrentUser(null));
   }, []);
 
@@ -847,9 +996,13 @@ export function LandingPageDesignBrief() {
         loading={loading}
         currentUser={currentUser}
         onAuthClick={onAuthClick}
-        onLogoutClick={onLogoutClick}
+        onAccountClick={onAccountClick}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        access={access}
+        onSelectStore={onSelectStore}
+        onUnlock={() => openPlans('compare')}
+        comparePrice={comparePrice}
       />
 
       {/* Modals */}
@@ -858,8 +1011,33 @@ export function LandingPageDesignBrief() {
         onClose={() => setIsProductsOpen(false)}
         products={products}
         lang={lang}
+        country={country}
         currentUser={currentUser}
+        onNeedGold={() => openPlans('gold')}
       />
+      <PlansModal
+        isOpen={plansHighlight !== null}
+        onClose={() => setPlansHighlight(null)}
+        lang={lang}
+        currentUser={currentUser}
+        highlight={plansHighlight ?? undefined}
+        onNeedLogin={() => {
+          setPlansHighlight(null);
+          setIsAuthModalOpen(true);
+        }}
+        onUserChange={setCurrentUser}
+      />
+      {currentUser && (
+        <AccountModal
+          isOpen={isAccountOpen}
+          onClose={() => setIsAccountOpen(false)}
+          lang={lang}
+          user={currentUser}
+          onUserChange={setCurrentUser}
+          onLogout={onLogoutClick}
+          onOpenPlans={() => openPlans('gold')}
+        />
+      )}
       <StoresModal isOpen={isStoresOpen} onClose={() => setIsStoresOpen(false)} lang={lang} country={country} />
       <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} lang={lang} />
       <AuthModal

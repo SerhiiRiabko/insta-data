@@ -30,6 +30,15 @@ email-validator==2.3.0  # required by pydantic's EmailStr (auth.py request model
 # MonteLand/KartIQ (RESEND_API_KEY shared across the user's local projects)
 resend==2.4.0
 
+# Telegram bot (@helperinshopping_bot, backend/bot/) — 3.31 is the newest
+# that resolves against aiohttp 3.9 / pydantic 2.5 pinned here
+aiogram==3.31.0
+
+# Claude Haiku: second step of the batch product-name translation (after
+# Groq). 1.5.0 is the newest anthropic SDK compatible with fastapi 0.104's
+# anyio<4 pin; it runs on its own httpx2 package, separate from httpx below.
+anthropic==1.5.0
+
 # 📱 Instagram Scraping
 # instagrapi pins pydantic 1.x, which conflicts with the pydantic v2 stack
 # the rest of this app runs on - deliberately NOT installed (see the

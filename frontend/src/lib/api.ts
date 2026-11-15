@@ -8,7 +8,35 @@ import type { Lang } from './productMatrix';
 
 export type Country = 'ME' | 'UA';
 
+export type Plan = 'free' | 'compare' | 'gold';
+
+/** What the current user may see - returned by /auth/me and every matrix endpoint. */
+export interface Access {
+  plan: Plan;
+  compare: boolean;
+  lists: boolean;
+  expires_at: string | null;
+  forever: boolean;
+  // Matrix endpoints only: the store picker for the free plan.
+  all_stores?: { name: string; initial: string; color: string }[];
+  selected_store?: string | null;
+}
+
+export interface CurrentUser {
+  id: string;
+  email: string | null;
+  is_admin: boolean;
+  has_password: boolean;
+  telegram: { id: number; username: string | null; first_name: string | null } | null;
+  access: Access;
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+
+export const TELEGRAM_BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'helperinshopping_bot';
+
+export const telegramBotLink = (startPayload?: string) =>
+  `https://t.me/${TELEGRAM_BOT_USERNAME}${startPayload ? `?start=${startPayload}` : ''}`;
 
 const api: AxiosInstance = axios.create({
   baseURL: `${API_URL}/api/v1`,
@@ -40,16 +68,19 @@ export default api;
 /**
  * Products API functions (Frontend Integration)
  */
+// `store`: on the free plan the backend returns only this one store's
+// prices (see gate_matrix in backend/app/api/v1/endpoints/products.py);
+// paid plans ignore it and get every store.
 export const productsAPI = {
-  priceMatrix: (lang: Lang = 'ukr', country: Country = 'ME') =>
-    api.get('/products/matrix', { params: { lang, country } }),
+  priceMatrix: (lang: Lang = 'ukr', country: Country = 'ME', store?: string | null) =>
+    api.get('/products/matrix', { params: { lang, country, store: store || undefined } }),
 
   // Fast default for page load: last persisted scan from MongoDB, refreshed
   // automatically once a week (Mon 07:00 Kyiv) by the backend scheduler.
   // Phase 4.6: `lang` resolves each product's translated name server-side
   // (falls back to the source name when no translation is cached yet).
-  matrixCached: (lang: Lang = 'ukr', country: Country = 'ME') =>
-    api.get('/products/matrix-cached', { params: { lang, country } }),
+  matrixCached: (lang: Lang = 'ukr', country: Country = 'ME', store?: string | null) =>
+    api.get('/products/matrix-cached', { params: { lang, country, store: store || undefined } }),
 
   // Manual "Оновити ціни" trigger + the weekly scheduled job on the backend
   // both hit a real scrape: cijene.me's JSON API for ME (~10-15s), but the
@@ -58,8 +89,8 @@ export const productsAPI = {
   // slower (~90-120s) - timeout sized for the slower of the two so a UA
   // refresh doesn't get cut off client-side while the scrape (and its
   // background persist) keeps running server-side regardless.
-  priceMatrixLive: (lang: Lang = 'ukr', country: Country = 'ME') =>
-    api.get('/products/matrix-live', { params: { lang, country }, timeout: 150000 }),
+  priceMatrixLive: (lang: Lang = 'ukr', country: Country = 'ME', store?: string | null) =>
+    api.get('/products/matrix-live', { params: { lang, country, store: store || undefined }, timeout: 150000 }),
 
   // Same live scrape as priceMatrixLive, grouped into product-group
   // categories (Овочі, Фрукти, Молочка, Бакалія...) instead of a flat list.
@@ -87,14 +118,17 @@ export interface ShoppingListItemInput {
   unit: string;
 }
 
+// Creating/saving/editing a list and sending it to Telegram need the Gold
+// plan (403 `gold_required`); viewing and ticking items stay open to anyone
+// with the link.
 export const listsAPI = {
-  create: (items: ShoppingListItemInput[], sessionId: string | null) =>
-    api.post('/lists', { items, session_id: sessionId }),
+  create: (items: ShoppingListItemInput[], sessionId: string | null, country: Country, lang: Lang) =>
+    api.post('/lists', { items, session_id: sessionId, country }, { params: { lang } }),
 
-  get: (listId: string) => api.get(`/lists/${listId}`),
+  get: (listId: string, lang: Lang) => api.get(`/lists/${listId}`, { params: { lang } }),
 
-  toggleItem: (listId: string, productId: string) =>
-    api.patch(`/lists/${listId}/toggle`, { product_id: productId }),
+  toggleItem: (listId: string, productId: string, lang: Lang) =>
+    api.patch(`/lists/${listId}/toggle`, { product_id: productId }, { params: { lang } }),
 
   addItem: (listId: string, item: ShoppingListItemInput) =>
     api.post(`/lists/${listId}/items`, item),
@@ -105,8 +139,22 @@ export const listsAPI = {
   // Phase 4.2 — requires an active session cookie (see authAPI below)
   mine: () => api.get('/lists/mine'),
 
-  save: (listId: string, name: string) =>
-    api.post(`/lists/${listId}/save`, { name }),
+  save: (listId: string, name: string, lang: Lang) =>
+    api.post(`/lists/${listId}/save`, { name }, { params: { lang } }),
+
+  sendTelegram: (listId: string, username: string, lang: Lang) =>
+    api.post(`/lists/${listId}/send-telegram`, { username, lang }),
+};
+
+/**
+ * Paid plans: Telegram Stars (needs a linked Telegram) or a card transfer
+ * an admin approves.
+ */
+export const subscriptionsAPI = {
+  plans: () => api.get('/subscriptions/plans'),
+  me: () => api.get('/subscriptions/me'),
+  starsInvoice: (plan: Plan, lang: Lang) => api.post('/subscriptions/stars-invoice', { plan, lang }),
+  cardRequest: (plan: Plan, comment: string) => api.post('/subscriptions/card-request', { plan, comment }),
 };
 
 /**
@@ -128,6 +176,17 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
 
   logout: () => api.post('/auth/logout'),
+
+  // Telegram: the site opens the returned t.me deep link, the user confirms
+  // in the bot, and the site polls the status endpoint.
+  telegramLogin: (lang: Lang) => api.post('/auth/telegram/login', { lang }),
+  telegramLoginStatus: (token: string) => api.get(`/auth/telegram/login/${token}`),
+  telegramLink: (plan?: Plan) => api.post('/auth/telegram/link', { plan: plan ?? null }),
+  telegramLinkStatus: (token: string) => api.get(`/auth/telegram/link/${token}`),
+  telegramUnlink: () => api.delete('/auth/telegram'),
+
+  // Adds email+password to an account that started in the bot.
+  setCredentials: (email: string, password: string) => api.post('/auth/credentials', { email, password }),
 };
 
 /**
@@ -181,19 +240,40 @@ export const scraperAgentsAPI = {
 };
 
 /**
- * Admin API (Phase 4.4) — tier limits + per-user tier assignment. All
- * routes require `is_admin` on the session (see authAPI.me()).
+ * Admin API — plan prices & card details, users and their plans, card
+ * transfer requests, catalog translation. All routes require `is_admin`.
  */
+export interface PlanSettings {
+  compare_stars: number;
+  gold_stars: number;
+  compare_eur: number;
+  gold_eur: number;
+  gold_list_limit: number;
+  card_details: string;
+}
+
 export const adminAPI = {
-  getTiers: () => api.get('/admin/tiers'),
+  getPlanSettings: () => api.get('/admin/plan-settings'),
 
-  updateTiers: (limits: { free: number; simple: number; pro: number }) =>
-    api.put('/admin/tiers', limits),
+  updatePlanSettings: (settings: Partial<PlanSettings>) => api.put('/admin/plan-settings', settings),
 
-  listUsers: () => api.get('/admin/users'),
+  listUsers: (q?: string) => api.get('/admin/users', { params: { q: q || undefined } }),
 
-  setUserTier: (userId: string, tier: string) =>
-    api.put(`/admin/users/${userId}/tier`, { tier }),
+  // identifier: email, @username or numeric Telegram id; months null = forever
+  grant: (identifier: string, plan: Plan, months: number | null) =>
+    api.post('/admin/users/grant', { identifier, plan, months }),
+
+  revoke: (userId: string, plan: Plan | null) => api.post(`/admin/users/${userId}/revoke`, { plan }),
+
+  paymentRequests: (status: 'pending' | 'all' = 'pending') =>
+    api.get('/admin/payment-requests', { params: { status } }),
+
+  decidePayment: (requestId: string, decision: 'approve' | 'decline') =>
+    api.post(`/admin/payment-requests/${requestId}/${decision}`),
+
+  translationStatus: () => api.get('/admin/translations/status'),
+
+  fillTranslations: (country: Country) => api.post('/admin/translations/fill', null, { params: { country } }),
 };
 
 /**

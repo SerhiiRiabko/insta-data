@@ -2,6 +2,8 @@
 
 > ⚠️ **Застаріло:** з 2026-09-01 проект працює на сервері Contabo **95.111.240.154** (pm2 + nginx), не на Hetzner. Сайт: http://95.111.240.154/insta-data/ukr, адмінка: http://95.111.240.154/insta-data/ukr/admin, API: http://95.111.240.154/insta-data-api/docs. Код на сервері: `/home/deploy/apps/insta-data`; SSH: `ssh -i "C:/Users/Serhii/.ssh/contabo" root@95.111.240.154`. Нижче — інструкція для старого сервера Hetzner, лишена для історії.
 
+> **Contabo, pm2-процеси:** `insta-data-backend` (uvicorn :8010, cwd `backend/`), `insta-data-frontend` (`npm start -- -p 3010`, cwd `frontend/`), `insta-data-bot` (Telegram-бот, `venv/bin/python -m bot.main`, cwd `backend/`, long polling). Бот і API читають той самий `backend/.env` — там мають бути `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `ADMIN_TELEGRAM_USERNAMES`, `GROQ_API_KEY`, (опційно) `ANTHROPIC_API_KEY`. Фронтенд під `/insta-data`: `NEXT_BASE_PATH=/insta-data` у `frontend/.env.production` (читається під час `npm run build`). Запуск бота вперше: `cd backend && pm2 start venv/bin/python --name insta-data-bot -- -m bot.main && pm2 save`. Тільки ОДИН процес на токен може робити getUpdates — не запускайте бота локально, поки працює серверний.
+
 **Target:** Hetzner VPS (root@138.199.204.107)  
 **OS:** Linux (Ubuntu 20.04+)  
 **Time Required:** ~1 hour

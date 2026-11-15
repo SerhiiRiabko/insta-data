@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { listsAPI } from '@/lib/api';
+import { listsAPI, type Country, type CurrentUser } from '@/lib/api';
+import { at } from '@/lib/accountText';
 import { getSessionId, loadCart, saveCart, clearCart, type CartItem } from '@/lib/shoppingCart';
-import { groupByCategory, translations as matrixTranslations, type Lang } from '@/lib/productMatrix';
+import { categoryLabel, groupByCategory, translations as matrixTranslations, type Lang } from '@/lib/productMatrix';
 
 interface Product {
   id?: string;
@@ -27,7 +28,10 @@ interface ShoppingListModalProps {
   onClose: () => void;
   products: Product[];
   lang: Lang;
-  currentUser: { id: string; email: string; tier: string } | null;
+  country: Country;
+  currentUser: CurrentUser | null;
+  // Lists are a Gold feature - opens the plans modal.
+  onNeedGold: () => void;
 }
 
 type ShoppingListText = {
@@ -136,7 +140,7 @@ const translations: Record<Lang, ShoppingListText> = {
   },
 };
 
-export function ShoppingListModal({ isOpen, onClose, products, lang, currentUser }: ShoppingListModalProps) {
+export function ShoppingListModal({ isOpen, onClose, products, lang, country, currentUser, onNeedGold }: ShoppingListModalProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -182,6 +186,33 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, currentUser
 
   if (!isOpen) return null;
 
+  if (!currentUser?.access.lists) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-[28rem] w-full p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xl font-bold" style={{ color: '#0f3d2e' }}>
+              {t.title}
+            </h2>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl" aria-label="Close">
+              ✕
+            </button>
+          </div>
+          <p className="text-sm mb-5" style={{ color: '#33524a' }}>
+            ⭐ {at(lang, 'goldRequired')}
+          </p>
+          <button
+            onClick={onNeedGold}
+            className="w-full py-2.5 rounded-lg font-semibold text-sm"
+            style={{ backgroundColor: '#0b6e4f', color: 'white', border: 'none', cursor: 'pointer' }}
+          >
+            {at(lang, 'upgrade')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const search = searchTerm.toLowerCase();
   const matches = (name: string) => name.toLowerCase().includes(search);
 
@@ -219,12 +250,19 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, currentUser
     setCreateError(null);
     try {
       const sessionId = getSessionId();
-      const response = await listsAPI.create(cart, sessionId);
+      // The cart is per browser, not per country - keep only this country's
+      // products so the list's prices line up with its stores.
+      const items = cart.filter((c) => products.some((p) => p.id === c.product_id));
+      const response = await listsAPI.create(items.length > 0 ? items : cart, sessionId, country, lang);
       clearCart();
       goToList(response.data.id);
     } catch (err: any) {
       console.error('Failed to create list:', err);
-      setCreateError(err?.response?.data?.detail || 'Failed to create list.');
+      if (err?.response?.data?.detail === 'gold_required') {
+        onNeedGold();
+      } else {
+        setCreateError(err?.response?.data?.detail || 'Failed to create list.');
+      }
       setCreating(false);
     }
   };
@@ -329,7 +367,7 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, currentUser
             filteredCategories.map((cat) => (
               <div key={cat.name}>
                 <div className="sticky top-0 bg-gray-50 px-6 py-2 text-sm font-bold text-gray-700 border-y border-gray-200">
-                  {cat.name} ({cat.rows.length})
+                  {categoryLabel(cat.name, lang)} ({cat.rows.length})
                 </div>
                 <div className="divide-y divide-gray-100">
                   {cat.rows.map((product, idx) => (

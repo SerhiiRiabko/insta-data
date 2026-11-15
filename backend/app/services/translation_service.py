@@ -1,8 +1,11 @@
 """
-Product-name translation service (Phase 4.6).
+Product-name translation service (Phase 4.6, multi-country since 2026-11).
 
-Products are scraped in Montenegrin/Serbian (Latin script, mixed with brand
-names). This service resolves a display name per UI locale:
+Montenegro's products are scraped in Montenegrin/Serbian (Latin script,
+mixed with brand names), Ukraine's in Ukrainian - see
+SOURCE_LOCALE_BY_COUNTRY / TRANSLATION_TARGETS. Whole catalogs are
+translated in batches by translate_batch() (Groq, then Claude Haiku for the
+rest), driven by app/services/translation_jobs.py. Per-name resolution:
 
 - `name_i18n` on a product doc, if already translated/cached there, wins.
 - Otherwise, try `grocery_dictionary.translate_via_dictionary()` — a free,
@@ -25,11 +28,13 @@ known/likely brand token off the front of the name so the AI-fallback
 prompt can instruct the model to leave it alone too.
 """
 
+import json
 import logging
 import re
 from typing import Optional
 
 import httpx
+from pydantic import BaseModel
 
 from app.core.config import settings
 from app.services.grocery_dictionary import translate_via_dictionary
@@ -37,6 +42,17 @@ from app.services.grocery_dictionary import translate_via_dictionary
 logger = logging.getLogger(__name__)
 
 SUPPORTED_LOCALES = ["ukr", "rus", "mne", "srb", "bos", "eng"]
+
+# Each country's catalog is scraped in one language: cijene.me (ME) names are
+# Montenegrin/Serbian Latin, the UA stores' names are Ukrainian.
+SOURCE_LOCALE_BY_COUNTRY = {"ME": "mne", "UA": "ukr"}
+
+# Locales that get a stored `name_i18n` translation, per country. srb/bos
+# are never translated separately: for ME they read the (already
+# Serbian-like) source name, for UA they reuse the "mne" Latin translation -
+# see LOCALE_FALLBACK.
+TRANSLATION_TARGETS = {"ME": ["ukr", "rus", "eng"], "UA": ["rus", "eng", "mne"]}
+LOCALE_FALLBACK = {"srb": "mne", "bos": "mne"}
 
 LOCALE_NAMES = {
     "ukr": "Ukrainian",
@@ -144,9 +160,18 @@ async def _translate_name_ai(name: str, target_locale: str) -> Optional[str]:
         return None
 
 
-async def translate_to_all_locales(name: str) -> dict:
+async def translate_to_all_locales(name: str, country: str = "ME") -> dict:
     """Translates `name` into every locale that needs it. Best-effort - any
     locale that fails to translate is simply omitted from the result dict."""
+    if country != "ME":
+        source = SOURCE_LOCALE_BY_COUNTRY[country]
+        result = {}
+        for locale in TRANSLATION_TARGETS[country]:
+            translated = (await translate_batch([name], source, locale)).get(name)
+            if translated:
+                result[locale] = translated
+        return result
+
     result = {}
     for locale in LOCALES_NEEDING_TRANSLATION:
         translated = await translate_name(name, locale)
@@ -159,4 +184,118 @@ def resolve_display_name(doc: dict, locale: str) -> str:
     """Resolves the name to show for `doc` in `locale`: cached translation if
     present, else the original source name. Never returns None/empty."""
     name_i18n = doc.get("name_i18n") or {}
-    return name_i18n.get(locale) or doc.get("name", "")
+    fallback = LOCALE_FALLBACK.get(locale)
+    return name_i18n.get(locale) or (fallback and name_i18n.get(fallback)) or doc.get("name", "")
+
+
+# ---------------------------------------------------------------------------
+# Batch AI translation: Groq first, Claude Haiku for whatever Groq didn't
+# return (rate limit, error, malformed or incomplete JSON).
+# ---------------------------------------------------------------------------
+
+BATCH_SYSTEM_PROMPT = (
+    "You translate grocery and household product names for a price-comparison "
+    "website, from {source} to {target}. Rules: keep brand and manufacturer "
+    "names, product-line names, numbers, percentages, weights and units "
+    "exactly as written (do not transliterate brands); translate only the "
+    "generic product words and descriptors; keep it a short product title, "
+    "not a sentence. Return one translation per input line, keyed by its "
+    "number."
+)
+
+
+class _BatchItem(BaseModel):
+    n: int
+    text: str
+
+
+class _BatchOut(BaseModel):
+    translations: list[_BatchItem]
+
+
+def _numbered(names: list[str]) -> str:
+    return "\n".join(f"{i}. {name}" for i, name in enumerate(names, start=1))
+
+
+def _collect(names: list[str], pairs: list[tuple[int, str]]) -> dict[str, str]:
+    result = {}
+    for n, text in pairs:
+        text = (text or "").strip().strip('"')
+        if 1 <= n <= len(names) and text:
+            result[names[n - 1]] = text
+    return result
+
+
+async def _batch_groq(names: list[str], source: str, target: str) -> dict[str, str]:
+    if not settings.groq_api_key:
+        return {}
+    system = BATCH_SYSTEM_PROMPT.format(source=LOCALE_NAMES[source], target=LOCALE_NAMES[target])
+    user = (
+        'Reply with only a JSON object {"translations": [{"n": 1, "text": "..."}, ...]}.\n\n'
+        + _numbered(names)
+    )
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.groq_api_key}"},
+                json={
+                    "model": settings.groq_model,
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                    "temperature": 0.1,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+        if response.status_code == 429:
+            logger.info("Groq rate-limited - batch goes to the fallback")
+            return {}
+        response.raise_for_status()
+        content = json.loads(response.json()["choices"][0]["message"]["content"])
+        pairs = [(int(item["n"]), str(item["text"])) for item in content.get("translations", [])]
+        return _collect(names, pairs)
+    except Exception as e:
+        logger.warning(f"Groq batch translation failed ({source}->{target}, {len(names)} names): {e}")
+        return {}
+
+
+async def _batch_claude(names: list[str], source: str, target: str) -> dict[str, str]:
+    if not settings.anthropic_api_key or not names:
+        return {}
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    try:
+        response = await client.messages.parse(
+            model=settings.anthropic_model,
+            max_tokens=8000,
+            system=BATCH_SYSTEM_PROMPT.format(source=LOCALE_NAMES[source], target=LOCALE_NAMES[target]),
+            messages=[{"role": "user", "content": _numbered(names)}],
+            output_config={"effort": "low"},
+            output_format=_BatchOut,
+        )
+    except anthropic.RateLimitError as e:
+        logger.warning(f"Claude batch translation rate-limited: {e}")
+        return {}
+    except anthropic.APIStatusError as e:
+        logger.warning(f"Claude batch translation failed ({e.status_code}): {e.message}")
+        return {}
+    except anthropic.APIConnectionError as e:
+        logger.warning(f"Claude batch translation connection error: {e}")
+        return {}
+    finally:
+        await client.close()
+
+    if response.stop_reason in ("refusal", "max_tokens") or response.parsed_output is None:
+        logger.warning(f"Claude batch translation unusable (stop_reason={response.stop_reason})")
+        return {}
+    return _collect(names, [(item.n, item.text) for item in response.parsed_output.translations])
+
+
+async def translate_batch(names: list[str], source: str, target: str) -> dict[str, str]:
+    """{source name: translation} for as many of `names` as the AI steps
+    managed; names missing from the result simply stay untranslated."""
+    result = await _batch_groq(names, source, target)
+    missing = [n for n in names if n not in result]
+    if missing:
+        result.update(await _batch_claude(missing, source, target))
+    return result

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { authAPI, listsAPI } from '@/lib/api';
+import { authAPI, listsAPI, telegramBotLink, TELEGRAM_BOT_USERNAME, type Country, type CurrentUser } from '@/lib/api';
+import { at } from '@/lib/accountText';
 import { formatPrice, type MatrixStore, type Lang } from '@/lib/productMatrix';
 
 export interface ShoppingListItem {
@@ -18,7 +19,13 @@ export interface ShoppingListData {
   id: string;
   name: string | null;
   saved: boolean;
+  owner_user_id: string | null;
+  // The list's own country and its stores, in the same column order as
+  // each item's `prices`.
+  country: Country;
+  stores: MatrixStore[];
   items: ShoppingListItem[];
+  total_cheapest: number;
   created_at: string;
   updated_at: string;
 }
@@ -124,37 +131,65 @@ const translations: Record<Lang, ShoppingListText> = {
 
 interface ShoppingListViewProps {
   data: ShoppingListData;
-  stores: MatrixStore[];
   lang: Lang;
   accent?: string;
   onBack?: () => void;
 }
 
-export function ShoppingListView({ data, stores, lang, accent = '#0b6e4f', onBack }: ShoppingListViewProps) {
+export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: ShoppingListViewProps) {
   const t = translations[lang];
+  const stores: MatrixStore[] = data.stores;
   const [items, setItems] = useState(data.items);
   const [copied, setCopied] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [saved, setSaved] = useState(data.saved);
   const [listName, setListName] = useState(data.name);
   const [namingOpen, setNamingOpen] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [recipient, setRecipient] = useState('');
+  const [sendState, setSendState] = useState<'idle' | 'sending' | 'sent' | 'notFound' | 'error'>('idle');
 
   useEffect(() => {
     authAPI
       .me()
-      .then(() => setIsLoggedIn(true))
-      .catch(() => setIsLoggedIn(false));
+      .then((res) => setCurrentUser(res.data))
+      .catch(() => setCurrentUser(null));
   }, []);
+
+  // Saving and sending to a Telegram user are Gold features; viewing,
+  // ticking and sharing the link work for everyone who has the link.
+  const isGold = !!currentUser?.access.lists;
+  const cheapestTotal = items
+    .filter((i) => !i.checked && i.min_price !== null)
+    .reduce((sum, i) => sum + (i.min_price as number), 0);
+
+  const shareToTelegram = () => {
+    const text = `${at(lang, 'shareMessage')}\n${telegramBotLink(`list_${data.id}`)}`;
+    const url = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const sendToUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recipient.trim()) return;
+    setSendState('sending');
+    try {
+      await listsAPI.sendTelegram(data.id, recipient.trim(), lang);
+      setSendState('sent');
+      setRecipient('');
+    } catch (err: any) {
+      setSendState(err?.response?.data?.detail === 'telegram_user_not_found' ? 'notFound' : 'error');
+    }
+  };
 
   const confirmSave = async () => {
     if (!nameInput.trim() || saving) return;
     setSaving(true);
     setSaveError(null);
     try {
-      const response = await listsAPI.save(data.id, nameInput.trim());
+      const response = await listsAPI.save(data.id, nameInput.trim(), lang);
       setSaved(true);
       setListName(response.data.name);
       setNamingOpen(false);
@@ -171,7 +206,7 @@ export function ShoppingListView({ data, stores, lang, accent = '#0b6e4f', onBac
     // viewing the same shared link picks it up on their next fetch/reload
     setItems((prev) => prev.map((i) => (i.product_id === productId ? { ...i, checked: !i.checked } : i)));
     try {
-      await listsAPI.toggleItem(data.id, productId);
+      await listsAPI.toggleItem(data.id, productId, lang);
     } catch (err) {
       console.error('Failed to toggle item:', err);
       setItems((prev) => prev.map((i) => (i.product_id === productId ? { ...i, checked: !i.checked } : i)));
@@ -197,6 +232,7 @@ export function ShoppingListView({ data, stores, lang, accent = '#0b6e4f', onBac
           </h1>
           <p className="text-sm" style={{ color: '#7d9a8d' }}>
             {t.itemsCount(items.length)}
+            {cheapestTotal > 0 && ` · ${at(lang, 'cheapestTotal')}: ${formatPrice(cheapestTotal, lang, data.country)}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -209,7 +245,7 @@ export function ShoppingListView({ data, stores, lang, accent = '#0b6e4f', onBac
               {t.back}
             </button>
           )}
-          {isLoggedIn && (saved ? (
+          {isGold && (saved ? (
             <span className="text-sm font-medium" style={{ color: '#05603a' }}>
               {t.saved}
             </span>
@@ -237,6 +273,60 @@ export function ShoppingListView({ data, stores, lang, accent = '#0b6e4f', onBac
           </button>
         </div>
       </div>
+
+      <div className="flex items-center gap-2 mb-4 px-1 flex-wrap">
+        <button
+          onClick={shareToTelegram}
+          className="rounded-full text-sm font-semibold"
+          style={{ padding: '8px 16px', backgroundColor: '#229ED9', color: 'white', border: 'none', cursor: 'pointer' }}
+        >
+          ✈️ {at(lang, 'shareTelegram')}
+        </button>
+        <a
+          href={telegramBotLink(`list_${data.id}`)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full text-sm font-semibold"
+          style={{ padding: '8px 16px', backgroundColor: 'white', color: '#229ED9', border: '1px solid #229ED9' }}
+        >
+          {at(lang, 'openInBot')}
+        </a>
+      </div>
+
+      {isGold && (
+        <form onSubmit={sendToUser} className="mb-4 px-1">
+          <label className="block text-xs font-medium mb-1" style={{ color: '#52736a' }}>
+            {at(lang, 'sendToUser')}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={recipient}
+              onChange={(e) => {
+                setRecipient(e.target.value);
+                if (sendState !== 'sending') setSendState('idle');
+              }}
+              placeholder="@username"
+              className="flex-1 px-3 py-2 border rounded-lg text-sm"
+              style={{ borderColor: '#d0d9d5' }}
+            />
+            <button
+              type="submit"
+              disabled={!recipient.trim() || sendState === 'sending'}
+              className="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
+              style={{ backgroundColor: sendState === 'sent' ? '#d8f3e3' : '#229ED9', color: sendState === 'sent' ? '#05603a' : 'white', border: 'none', cursor: 'pointer' }}
+            >
+              {sendState === 'sent' ? at(lang, 'sent') : at(lang, 'send')}
+            </button>
+          </div>
+          {sendState === 'notFound' && (
+            <p className="text-xs mt-2" style={{ color: '#b45309' }}>
+              {at(lang, 'userNotFound', { bot: TELEGRAM_BOT_USERNAME })}
+            </p>
+          )}
+          {sendState === 'error' && <p className="text-xs mt-2 text-red-600">{at(lang, 'error')}</p>}
+        </form>
+      )}
 
       {namingOpen && (
         <div className="mb-4 px-1">
@@ -329,7 +419,7 @@ export function ShoppingListView({ data, stores, lang, accent = '#0b6e4f', onBac
                       fontFamily: 'Space Grotesk, monospace',
                     }}
                   >
-                    {formatPrice(item.min_price, lang)}
+                    {formatPrice(item.min_price, lang, data.country)}
                   </div>
                   {item.cheapest_store && (
                     <div className="text-[10px]" style={{ color: '#a3b5ae' }}>
@@ -368,7 +458,7 @@ export function ShoppingListView({ data, stores, lang, accent = '#0b6e4f', onBac
                             color: price === null ? '#ccc' : isCheapest ? '#05603a' : '#52736a',
                           }}
                         >
-                          {price === null ? '—' : formatPrice(price, lang)}
+                          {price === null ? '—' : formatPrice(price, lang, data.country)}
                         </div>
                       </div>
                     );

@@ -5,6 +5,10 @@ const withNextIntl = createNextIntlPlugin();
 
 const nextConfig = {
   reactStrictMode: true,
+  // Production is served under http://<server>/insta-data - set
+  // NEXT_BASE_PATH=/insta-data in that server's frontend/.env.production
+  // (read at build time) instead of editing this file there.
+  basePath: process.env.NEXT_BASE_PATH || undefined,
   swcMinify: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',

@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { adminAPI, authAPI, storesAPI, scraperAgentsAPI, type StoreInput, type ScraperAgentInput } from '@/lib/api';
+import {
+  adminAPI,
+  authAPI,
+  storesAPI,
+  scraperAgentsAPI,
+  type Access,
+  type CurrentUser,
+  type PlanSettings,
+  type Plan,
+  type StoreInput,
+  type ScraperAgentInput,
+} from '@/lib/api';
 import { AuthModal } from '@/components/AuthModal';
-
-type CurrentUser = { id: string; email: string; tier: string; is_admin: boolean };
 
 interface StoreRow {
   id: string;
@@ -18,10 +27,34 @@ interface StoreRow {
 
 interface UserRow {
   id: string;
-  email: string;
-  tier: string;
+  email: string | null;
+  telegram_id: number | null;
+  telegram_username: string | null;
+  label: string;
   is_admin: boolean;
+  access: Access;
+  compare_until: string | null;
+  gold_until: string | null;
+  created_at: string | null;
+}
+
+interface PaymentRequestRow {
+  id: string;
+  user: string;
+  plan: Plan;
+  amount_eur: number;
+  comment: string;
+  status: 'pending' | 'approved' | 'declined';
   created_at: string;
+}
+
+const PLAN_LABEL: Record<string, string> = { free: 'Безкоштовний', compare: 'Порівняння', gold: 'Gold' };
+
+function untilLabel(value: string | null): string {
+  if (!value) return '—';
+  if (value === 'forever') return 'безстроково';
+  const date = new Date(value);
+  return date < new Date() ? `минув ${date.toLocaleDateString('uk-UA')}` : `до ${date.toLocaleDateString('uk-UA')}`;
 }
 
 interface ScraperAgentRow {
@@ -44,7 +77,7 @@ const EMPTY_AGENT: ScraperAgentInput = { name: '', strategy: 'custom', store_ids
 
 export function AdminPageClient() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null | 'loading'>('loading');
-  const [tab, setTab] = useState<'stores' | 'scrapers' | 'tiers' | 'users'>('stores');
+  const [tab, setTab] = useState<'stores' | 'scrapers' | 'plans' | 'users' | 'payments'>('payments');
 
   useEffect(() => {
     authAPI
@@ -63,7 +96,7 @@ export function AdminPageClient() {
         <AuthModal
           isOpen={true}
           onClose={() => {}}
-          onAuthenticated={(user) => setCurrentUser(user as CurrentUser)}
+          onAuthenticated={(user) => setCurrentUser(user)}
           lang="ukr"
         />
       </div>
@@ -85,11 +118,11 @@ export function AdminPageClient() {
           Адмінка
         </h1>
         <p className="text-sm mb-6" style={{ color: '#7d9a8d' }}>
-          {currentUser.email}
+          {currentUser.email || (currentUser.telegram?.username ? `@${currentUser.telegram.username}` : '')}
         </p>
 
-        <div className="flex gap-1 mb-6 rounded-lg overflow-hidden border w-fit" style={{ borderColor: '#e3eee8' }}>
-          {(['stores', 'scrapers', 'tiers', 'users'] as const).map((tb) => (
+        <div className="flex flex-wrap gap-1 mb-6 rounded-lg overflow-hidden border w-fit" style={{ borderColor: '#e3eee8' }}>
+          {(['payments', 'users', 'plans', 'stores', 'scrapers'] as const).map((tb) => (
             <button
               key={tb}
               onClick={() => setTab(tb)}
@@ -102,15 +135,16 @@ export function AdminPageClient() {
                 cursor: 'pointer',
               }}
             >
-              {tb === 'stores' ? 'Магазини' : tb === 'scrapers' ? 'Скрейпери' : tb === 'tiers' ? 'Тарифи' : 'Юзери'}
+              {{ stores: 'Магазини', scrapers: 'Скрейпери', plans: 'Тарифи', users: 'Юзери', payments: 'Оплати' }[tb]}
             </button>
           ))}
         </div>
 
         {tab === 'stores' && <StoresTab />}
         {tab === 'scrapers' && <ScrapersTab />}
-        {tab === 'tiers' && <TiersTab />}
+        {tab === 'plans' && <PlansTab />}
         {tab === 'users' && <UsersTab />}
+        {tab === 'payments' && <PaymentsTab />}
       </div>
     </div>
   );
@@ -424,97 +458,332 @@ function ScrapersTab() {
   );
 }
 
-function TiersTab() {
-  const [limits, setLimits] = useState<{ free: number; simple: number; pro: number } | null>(null);
+function PlansTab() {
+  const [settings, setSettings] = useState<PlanSettings | null>(null);
   const [saved, setSaved] = useState(false);
+  const [translations, setTranslations] = useState<Record<string, { total: number; running: boolean; translated: Record<string, number> }> | null>(null);
+
+  const loadTranslations = () => adminAPI.translationStatus().then((res) => setTranslations(res.data));
 
   useEffect(() => {
-    adminAPI.getTiers().then((res) => setLimits(res.data));
+    adminAPI.getPlanSettings().then((res) => setSettings(res.data));
+    loadTranslations();
   }, []);
 
   const save = async () => {
-    if (!limits) return;
-    const res = await adminAPI.updateTiers(limits);
-    setLimits(res.data);
+    if (!settings) return;
+    const res = await adminAPI.updatePlanSettings(settings);
+    setSettings(res.data);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (!limits) return null;
+  const fill = async (country: 'ME' | 'UA') => {
+    await adminAPI.fillTranslations(country);
+    loadTranslations();
+  };
+
+  if (!settings) return null;
+
+  const numberField = (key: keyof PlanSettings, label: string, step = 1) => (
+    <label key={key} className="flex items-center justify-between gap-3">
+      <span className="text-sm" style={{ color: '#33524a' }}>
+        {label}
+      </span>
+      <input
+        type="number"
+        min={step < 1 ? 0.5 : 1}
+        step={step}
+        value={settings[key] as number}
+        onChange={(e) => setSettings({ ...settings, [key]: Number(e.target.value) })}
+        className="w-28 px-3 py-2 border rounded-lg text-sm"
+        style={{ borderColor: '#d0d9d5' }}
+      />
+    </label>
+  );
 
   return (
-    <div className="bg-white rounded-2xl border p-4" style={{ borderColor: '#e3eee8' }}>
-      <h2 className="font-semibold mb-4" style={{ color: '#0f3d2e' }}>
-        Ліміти списків по тарифах
-      </h2>
-      <div className="space-y-3 max-w-[20rem]">
-        {(['free', 'simple', 'pro'] as const).map((tier) => (
-          <label key={tier} className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium capitalize" style={{ color: '#33524a' }}>
-              {tier}
-            </span>
-            <input
-              type="number"
-              min={1}
-              value={limits[tier]}
-              onChange={(e) => setLimits({ ...limits, [tier]: Number(e.target.value) })}
-              className="w-24 px-3 py-2 border rounded-lg text-sm"
-              style={{ borderColor: '#d0d9d5' }}
-            />
-          </label>
-        ))}
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border p-4" style={{ borderColor: '#e3eee8' }}>
+        <h2 className="font-semibold mb-1" style={{ color: '#0f3d2e' }}>
+          Ціни тарифів (на місяць)
+        </h2>
+        <p className="text-xs mb-4" style={{ color: '#7d9a8d' }}>
+          Порівняння — ціни всіх магазинів. Gold — порівняння + списки покупок і шеринг. Діють і на сайті, і в боті.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 max-w-[36rem]">
+          {numberField('compare_stars', 'Порівняння, ⭐')}
+          {numberField('compare_eur', 'Порівняння, €', 0.5)}
+          {numberField('gold_stars', 'Gold, ⭐')}
+          {numberField('gold_eur', 'Gold, €', 0.5)}
+          {numberField('gold_list_limit', 'Gold: макс. списків')}
+        </div>
+
+        <label className="block mt-4">
+          <span className="text-sm font-medium" style={{ color: '#33524a' }}>
+            Реквізити для оплати карткою
+          </span>
+          <span className="block text-xs mb-1" style={{ color: '#7d9a8d' }}>
+            Номер картки / IBAN / отримувач — показується тим, хто платить переказом. Порожньо = оплата карткою вимкнена.
+          </span>
+          <textarea
+            rows={3}
+            value={settings.card_details}
+            onChange={(e) => setSettings({ ...settings, card_details: e.target.value })}
+            className="w-full px-3 py-2 border rounded-lg text-sm"
+            style={{ borderColor: '#d0d9d5', fontFamily: 'Space Grotesk, monospace' }}
+          />
+        </label>
+
+        <button
+          onClick={save}
+          className="mt-3 text-sm font-semibold rounded-lg"
+          style={{ padding: '8px 16px', backgroundColor: saved ? '#d8f3e3' : '#0b6e4f', color: saved ? '#05603a' : 'white', border: 'none', cursor: 'pointer' }}
+        >
+          {saved ? '✓ Збережено' : 'Зберегти'}
+        </button>
       </div>
-      <button
-        onClick={save}
-        className="mt-4 text-sm font-semibold rounded-lg"
-        style={{ padding: '8px 16px', backgroundColor: saved ? '#d8f3e3' : '#0b6e4f', color: saved ? '#05603a' : 'white', border: 'none', cursor: 'pointer' }}
-      >
-        {saved ? '✓ Збережено' : 'Зберегти'}
-      </button>
+
+      <div className="bg-white rounded-2xl border p-4" style={{ borderColor: '#e3eee8' }}>
+        <h2 className="font-semibold mb-1" style={{ color: '#0f3d2e' }}>
+          Переклад назв товарів
+        </h2>
+        <p className="text-xs mb-3" style={{ color: '#7d9a8d' }}>
+          Кеш → словник → Groq → Claude Haiku. Нові товари перекладаються автоматично після щотижневого оновлення цін.
+        </p>
+        {translations &&
+          Object.entries(translations).map(([country, s]) => (
+            <div key={country} className="flex items-center gap-3 py-2 flex-wrap" style={{ borderTop: '1px solid #f0f0f0' }}>
+              <span className="text-sm font-medium w-28" style={{ color: '#0f1419' }}>
+                {COUNTRY_LABEL[country as 'ME' | 'UA']}
+              </span>
+              <span className="text-xs flex-1" style={{ color: '#52736a' }}>
+                {Object.entries(s.translated)
+                  .map(([loc, n]) => `${loc}: ${n}/${s.total}`)
+                  .join(' · ')}
+              </span>
+              <button
+                onClick={() => fill(country as 'ME' | 'UA')}
+                disabled={s.running}
+                className="text-xs font-medium"
+                style={{ color: s.running ? '#a3b5ae' : '#0b6e4f', background: 'none', border: 'none', cursor: s.running ? 'default' : 'pointer' }}
+              >
+                {s.running ? 'Перекладаємо…' : 'Перекласти відсутні'}
+              </button>
+            </div>
+          ))}
+        <button onClick={loadTranslations} className="text-xs mt-2" style={{ color: '#52736a', background: 'none', border: 'none', cursor: 'pointer' }}>
+          ⟳ Оновити статус
+        </button>
+      </div>
     </div>
   );
 }
 
 function UsersTab() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [query, setQuery] = useState('');
+  const [identifier, setIdentifier] = useState('');
+  const [plan, setPlan] = useState<Plan>('gold');
+  const [months, setMonths] = useState<string>('1');
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const load = () => adminAPI.listUsers().then((res) => setUsers(res.data.users));
+  const load = (q = query) => adminAPI.listUsers(q).then((res) => setUsers(res.data.users));
 
   useEffect(() => {
-    load();
+    load('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setTier = async (id: string, tier: string) => {
-    await adminAPI.setUserTier(id, tier);
+  const grant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage(null);
+    try {
+      const res = await adminAPI.grant(identifier.trim(), plan, months === 'forever' ? null : Number(months));
+      setMessage({
+        ok: true,
+        text: res.data.status === 'queued' ? res.data.message : `✓ ${res.data.user.label}: ${PLAN_LABEL[plan]} ${untilLabel(plan === 'gold' ? res.data.user.gold_until : res.data.user.compare_until)}`,
+      });
+      setIdentifier('');
+      load();
+    } catch (err: any) {
+      setMessage({ ok: false, text: err?.response?.data?.detail || 'Помилка' });
+    }
+  };
+
+  const revoke = async (id: string) => {
+    await adminAPI.revoke(id, null);
     load();
   };
 
   return (
-    <div className="bg-white rounded-2xl border" style={{ borderColor: '#e3eee8' }}>
-      <div className="p-4 border-b" style={{ borderColor: '#f0f0f0' }}>
-        <h2 className="font-semibold" style={{ color: '#0f3d2e' }}>
-          Юзери ({users.length})
+    <div className="space-y-4">
+      <form onSubmit={grant} className="bg-white rounded-2xl border p-4" style={{ borderColor: '#e3eee8' }}>
+        <h2 className="font-semibold mb-1" style={{ color: '#0f3d2e' }}>
+          Видати тариф
         </h2>
-      </div>
-      <div className="divide-y" style={{ borderColor: '#f0f0f0' }}>
-        {users.map((u) => (
-          <div key={u.id} className="flex items-center gap-3 px-4 py-3">
-            <span className="flex-1 text-sm" style={{ color: '#0f1419' }}>
-              {u.email} {u.is_admin && <span style={{ color: '#0b6e4f' }}>(admin)</span>}
-            </span>
-            <select
-              value={u.tier}
-              onChange={(e) => setTier(u.id, e.target.value)}
-              className="px-2 py-1.5 border rounded-lg text-sm"
+        <p className="text-xs mb-3" style={{ color: '#7d9a8d' }}>
+          Email, @нікнейм або числовий Telegram id. Незареєстрованому email тариф застосується при першому вході; Telegram-користувач має хоч раз запустити бота.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <input
+            required
+            placeholder="email / @username / tg id"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+            className="flex-1 min-w-[14rem] px-3 py-2 border rounded-lg text-sm"
+            style={{ borderColor: '#d0d9d5' }}
+          />
+          <select value={plan} onChange={(e) => setPlan(e.target.value as Plan)} className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: '#d0d9d5' }}>
+            <option value="gold">Gold</option>
+            <option value="compare">Порівняння</option>
+          </select>
+          <select value={months} onChange={(e) => setMonths(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: '#d0d9d5' }}>
+            <option value="1">1 місяць</option>
+            <option value="3">3 місяці</option>
+            <option value="6">6 місяців</option>
+            <option value="12">12 місяців</option>
+            <option value="forever">Безстроково</option>
+          </select>
+          <button type="submit" className="text-sm font-semibold rounded-lg" style={{ padding: '8px 16px', backgroundColor: '#0b6e4f', color: 'white', border: 'none', cursor: 'pointer' }}>
+            Видати
+          </button>
+        </div>
+        {message && (
+          <p className="text-sm mt-2" style={{ color: message.ok ? '#05603a' : '#dc2626' }}>
+            {message.text}
+          </p>
+        )}
+      </form>
+
+      <div className="bg-white rounded-2xl border" style={{ borderColor: '#e3eee8' }}>
+        <div className="p-4 border-b flex items-center gap-3 flex-wrap" style={{ borderColor: '#f0f0f0' }}>
+          <h2 className="font-semibold" style={{ color: '#0f3d2e' }}>
+            Юзери ({users.length})
+          </h2>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              load();
+            }}
+            className="flex-1 flex justify-end"
+          >
+            <input
+              placeholder="Пошук: email або @нік"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full max-w-[16rem] px-3 py-1.5 border rounded-lg text-sm"
               style={{ borderColor: '#d0d9d5' }}
-            >
-              <option value="free">free</option>
-              <option value="simple">simple</option>
-              <option value="pro">pro</option>
-            </select>
-          </div>
-        ))}
+            />
+          </form>
+        </div>
+        <div className="divide-y" style={{ borderColor: '#f0f0f0' }}>
+          {users.map((u) => (
+            <div key={u.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
+              <span className="flex-1 min-w-[12rem] text-sm break-all" style={{ color: '#0f1419' }}>
+                {u.label} {u.is_admin && <span style={{ color: '#0b6e4f' }}>(admin)</span>}
+              </span>
+              <span className="text-xs" style={{ color: u.access.plan === 'free' ? '#a3b5ae' : '#05603a' }}>
+                {PLAN_LABEL[u.access.plan]}
+                {u.access.plan === 'gold' && !u.is_admin && ` · ${untilLabel(u.gold_until)}`}
+                {u.access.plan === 'compare' && ` · ${untilLabel(u.compare_until)}`}
+              </span>
+              {!u.is_admin && u.access.plan !== 'free' && (
+                <button onClick={() => revoke(u.id)} className="text-xs font-medium" style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  Забрати
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function PaymentsTab() {
+  const [requests, setRequests] = useState<PaymentRequestRow[]>([]);
+  const [status, setStatus] = useState<'pending' | 'all'>('pending');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = (s = status) => adminAPI.paymentRequests(s).then((res) => setRequests(res.data.requests));
+
+  useEffect(() => {
+    load(status);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  const decide = async (id: string, decision: 'approve' | 'decline') => {
+    setBusyId(id);
+    try {
+      await adminAPI.decidePayment(id, decision);
+    } finally {
+      setBusyId(null);
+      load();
+    }
+  };
+
+  const STATUS: Record<string, string> = { pending: 'Очікує', approved: '✅ Підтверджено', declined: '❌ Відхилено' };
+
+  return (
+    <div className="bg-white rounded-2xl border" style={{ borderColor: '#e3eee8' }}>
+      <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: '#f0f0f0' }}>
+        <h2 className="font-semibold" style={{ color: '#0f3d2e' }}>
+          Оплати карткою
+        </h2>
+        <select value={status} onChange={(e) => setStatus(e.target.value as 'pending' | 'all')} className="px-2 py-1.5 border rounded-lg text-sm" style={{ borderColor: '#d0d9d5' }}>
+          <option value="pending">Очікують</option>
+          <option value="all">Усі</option>
+        </select>
+      </div>
+      <p className="text-xs px-4 pt-3" style={{ color: '#7d9a8d' }}>
+        Ті самі запити приходять у Telegram з кнопками, якщо ваш Telegram прив’язаний до цього акаунта або ваш нік — @adyvan_2008. Оплата зірками зараховується автоматично.
+      </p>
+      {requests.length === 0 ? (
+        <p className="text-sm p-4" style={{ color: '#a3b5ae' }}>
+          Немає запитів.
+        </p>
+      ) : (
+        <div className="divide-y" style={{ borderColor: '#f0f0f0' }}>
+          {requests.map((r) => (
+            <div key={r.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
+              <div className="flex-1 min-w-[14rem]">
+                <div className="text-sm break-all" style={{ color: '#0f1419' }}>
+                  {r.user}
+                </div>
+                <div className="text-xs" style={{ color: '#52736a' }}>
+                  {PLAN_LABEL[r.plan]} · {r.amount_eur} € · {new Date(r.created_at).toLocaleString('uk-UA')}
+                  {r.comment && ` · ${r.comment}`}
+                </div>
+              </div>
+              {r.status === 'pending' ? (
+                <>
+                  <button
+                    onClick={() => decide(r.id, 'approve')}
+                    disabled={busyId === r.id}
+                    className="text-xs font-semibold rounded-lg"
+                    style={{ padding: '6px 12px', backgroundColor: '#0b6e4f', color: 'white', border: 'none', cursor: 'pointer' }}
+                  >
+                    Підтвердити
+                  </button>
+                  <button
+                    onClick={() => decide(r.id, 'decline')}
+                    disabled={busyId === r.id}
+                    className="text-xs font-medium"
+                    style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    Відхилити
+                  </button>
+                </>
+              ) : (
+                <span className="text-xs" style={{ color: '#52736a' }}>
+                  {STATUS[r.status]}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

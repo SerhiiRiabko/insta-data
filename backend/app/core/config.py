@@ -58,6 +58,21 @@ class Settings(BaseSettings):
     # used for AI enrichment in the sibling hrd-minion project).
     groq_api_key: str = ""
     groq_model: str = "llama-3.1-8b-instant"
+    # Second AI step for batch translation: used for whatever Groq didn't
+    # return (rate-limited, failed, malformed JSON). Empty = Groq only.
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-haiku-5-5"
+
+    # 🤖 Telegram bot (@helperinshopping_bot) — search, lists, Stars
+    # subscriptions, account linking. The bot process (backend/bot/) and this
+    # API share the same token: the API only *sends* (admin notifications,
+    # invoice links, shared lists), the bot process owns getUpdates polling.
+    telegram_bot_token: str = ""
+    telegram_bot_username: str = "helperinshopping_bot"
+    # Comma-separated Telegram usernames that get admin commands in the bot
+    # (and payment-approval notifications), on top of any Telegram account
+    # linked to an `is_admin` site account.
+    admin_telegram_usernames: str = "adyvan_2008"
 
     # 🌐 CORS
     cors_origins: List[str] = [

@@ -8,8 +8,10 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from datetime import datetime
 from app.database.mongodb import get_db, get_mongo_db
+from app.services.auth_service import get_current_user
 from app.services.category_map import classify_group_category
 from app.services.grocery_dictionary import translate_via_dictionary
+from app.services.subscription_service import access_payload
 from app.services.translation_service import (
     LOCALES_NEEDING_TRANSLATION,
     SUPPORTED_LOCALES,
@@ -48,6 +50,7 @@ class PriceMatrixResponse(BaseModel):
     products: List[ProductRow]
     updated_at: str
     total_products: int
+    access: Optional[dict] = None  # see gate_matrix()
 
 
 class ProductListItem(BaseModel):
@@ -182,6 +185,39 @@ def calculate_cheapest(prices: List[Optional[float]]) -> tuple:
     return min_price, cheapest_idx
 
 
+def gate_matrix(products: List[dict], stores: List[dict], user: Optional[dict], store: Optional[str]) -> dict:
+    """Free plan = one store at a time. Applied server-side, so a free
+    caller never receives the other stores' prices at all: rows without a
+    price in the chosen store are dropped and every row is narrowed to that
+    one column. Paid plans get the matrix untouched. `access.all_stores` is
+    what the frontend's store picker offers."""
+    access = access_payload(user)
+    if access["compare"] or not stores:
+        return {"products": products, "stores": stores, "access": {**access, "all_stores": stores, "selected_store": None}}
+
+    names = [s["name"] for s in stores]
+    idx = names.index(store) if store in names else 0
+    gated = []
+    for p in products:
+        prices = p.get("prices") or []
+        price = prices[idx] if idx < len(prices) else None
+        if price is None:
+            continue
+        promo = p.get("promo") or []
+        gated.append({
+            **p,
+            "prices": [price],
+            "promo": [bool(promo[idx]) if idx < len(promo) else False],
+            "min_price": price,
+            "cheapest_store": names[idx],
+        })
+    return {
+        "products": gated,
+        "stores": [stores[idx]],
+        "access": {**access, "all_stores": stores, "selected_store": names[idx]},
+    }
+
+
 def format_product_row(product: dict, stores: List[dict], lang: str = "ukr") -> ProductRow:
     """Convert mock/DB product to ProductRow. Resolves the display name via
     `name_i18n[lang]` if the product has been translated (Phase 4.6), falling
@@ -206,7 +242,9 @@ def format_product_row(product: dict, stores: List[dict], lang: str = "ukr") -> 
 async def get_price_matrix(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
     country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
-    db=Depends(get_db)
+    store: Optional[str] = Query(None, description="Free plan: which single store to show"),
+    db=Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user),
 ) -> PriceMatrixResponse:
     """
     Get price comparison matrix for landing page.
@@ -234,13 +272,15 @@ async def get_price_matrix(
             stores = FALLBACK_STORES_ME
 
         # Format response
-        product_rows = [format_product_row(p, stores, lang) for p in products]
+        rows = [format_product_row(p, stores, lang).model_dump() for p in products]
+        gated = gate_matrix(rows, stores, current_user, store)
 
         return PriceMatrixResponse(
-            stores=stores,
-            products=product_rows,
+            stores=gated["stores"],
+            products=gated["products"],
             updated_at=datetime.utcnow().isoformat(),
-            total_products=len(product_rows),
+            total_products=len(gated["products"]),
+            access=gated["access"],
         )
 
     except Exception as e:
@@ -249,13 +289,15 @@ async def get_price_matrix(
             return PriceMatrixResponse(stores=stores, products=[], updated_at=datetime.utcnow().isoformat(), total_products=0)
         # Fallback to mock data
         stores = FALLBACK_STORES_ME
-        product_rows = [format_product_row(p, stores, lang) for p in MOCK_PRODUCTS]
+        rows = [format_product_row(p, stores, lang).model_dump() for p in MOCK_PRODUCTS]
+        gated = gate_matrix(rows, stores, current_user, store)
 
         return PriceMatrixResponse(
-            stores=stores,
-            products=product_rows,
+            stores=gated["stores"],
+            products=gated["products"],
             updated_at=datetime.utcnow().isoformat(),
-            total_products=len(product_rows),
+            total_products=len(gated["products"]),
+            access=gated["access"],
         )
 
 
@@ -401,10 +443,15 @@ async def _persist_live_products(products: List[dict], country: str = "ME", stor
         }
         # Dictionary translation is free/deterministic - recompute on every
         # scrape so a re-scraped name always has an up to date name_i18n.
-        for locale in LOCALES_NEEDING_TRANSLATION:
-            translated = translate_via_dictionary(product["name"], locale)
-            if translated:
-                set_fields[f"name_i18n.{locale}"] = translated
+        # Montenegro only: it's a Montenegrin->X word list, and run over
+        # Ukrainian names it only swapped stray Latin brand words. Everything
+        # else is filled by translation_jobs.fill_translations() after the
+        # scheduled refresh.
+        if country == "ME":
+            for locale in LOCALES_NEEDING_TRANSLATION:
+                translated = translate_via_dictionary(product["name"], locale)
+                if translated:
+                    set_fields[f"name_i18n.{locale}"] = translated
 
         # Matched on (id, country), not just id: the same content hash could
         # in principle collide across two countries' independent catalogs,
@@ -525,6 +572,8 @@ def _build_product_row(group: dict, stores: List[dict], lang: str = "ukr") -> di
 async def get_price_matrix_live(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
     country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
+    store: Optional[str] = Query(None, description="Free plan: which single store to show"),
+    current_user: Optional[dict] = Depends(get_current_user),
 ):
     stores = await get_stores_for_country(country)
     try:
@@ -538,13 +587,16 @@ async def get_price_matrix_live(
 
         asyncio.create_task(_persist_live_products_background(products, country, stores))
 
+        gated = gate_matrix(products, stores, current_user, store)
         return {
-            "stores": stores,
-            "products": products,
-            "groups": grouped,
+            "stores": gated["stores"],
+            "products": gated["products"],
+            # Raw groups carry every store's price - paid plans only.
+            "groups": grouped if gated["access"]["compare"] else [],
             "total_groups": len(grouped),
             "total_products": len(all_products),
             "updated_at": datetime.utcnow().isoformat(),
+            "access": gated["access"],
         }
 
     except Exception as e:
@@ -556,6 +608,8 @@ async def get_price_matrix_live(
 async def get_products_by_category(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
     country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
+    store: Optional[str] = Query(None, description="Free plan: which single store to show"),
+    current_user: Optional[dict] = Depends(get_current_user),
 ):
     """
     Same live scrape as /matrix-live (cijene.me for ME, АТБ/Сільпо/Varus for
@@ -574,9 +628,12 @@ async def get_products_by_category(
         if not grouped and not all_products:
             return {"stores": stores, "categories": [], "total_products": 0}
 
+        rows = [_build_product_row(group, stores, lang) for group in grouped]
+        asyncio.create_task(_persist_live_products_background(rows, country, stores))
+
+        gated = gate_matrix(rows, stores, current_user, store)
         buckets: dict[str, list] = {}
-        for group in grouped:
-            row = _build_product_row(group, stores, lang)
+        for row in gated["products"]:
             buckets.setdefault(row["category"], []).append(row)
 
         categories = [
@@ -584,17 +641,12 @@ async def get_products_by_category(
             for name, products in sorted(buckets.items(), key=lambda kv: category_sort_key(kv[0]))
         ]
 
-        asyncio.create_task(
-            _persist_live_products_background(
-                [p for cat in categories for p in cat["products"]], country, stores
-            )
-        )
-
         return {
-            "stores": stores,
+            "stores": gated["stores"],
             "categories": categories,
             "total_products": len(all_products),
             "updated_at": datetime.utcnow().isoformat(),
+            "access": gated["access"],
         }
 
     except Exception as e:
@@ -606,6 +658,8 @@ async def get_products_by_category(
 async def get_price_matrix_cached(
     lang: str = Query("ukr", regex=LANG_REGEX, description="UI locale: ukr, rus, mne, srb, bos, eng"),
     country: str = Query("ME", regex=COUNTRY_REGEX, description="ME (Montenegro) or UA (Ukraine)"),
+    store: Optional[str] = Query(None, description="Free plan: which single store to show"),
+    current_user: Optional[dict] = Depends(get_current_user),
 ):
     """
     Default endpoint for page load: serves the last persisted scan from
@@ -640,14 +694,18 @@ async def get_price_matrix_cached(
 
     if not docs:
         if country == "ME":
+            rows = [format_product_row(p, FALLBACK_STORES_ME, lang).model_dump() for p in MOCK_PRODUCTS]
+            gated = gate_matrix(rows, FALLBACK_STORES_ME, current_user, store)
             return {
-                "stores": FALLBACK_STORES_ME,
-                "products": [format_product_row(p, FALLBACK_STORES_ME, lang).model_dump() for p in MOCK_PRODUCTS],
-                "total_products": len(MOCK_PRODUCTS),
+                "stores": gated["stores"],
+                "products": gated["products"],
+                "total_products": len(gated["products"]),
                 "updated_at": None,
                 "source": "mock",
+                "access": gated["access"],
             }
-        return {"stores": stores, "products": [], "total_products": 0, "updated_at": None, "source": "empty"}
+        gated = gate_matrix([], stores, current_user, store)
+        return {"stores": stores, "products": [], "total_products": 0, "updated_at": None, "source": "empty", "access": gated["access"]}
 
     products = [
         {
@@ -664,13 +722,15 @@ async def get_price_matrix_cached(
         for d in docs
     ]
     latest_update = max((d["updated_at"] for d in docs if d.get("updated_at")), default=None)
+    gated = gate_matrix(products, stores, current_user, store)
 
     return {
-        "stores": stores,
-        "products": products,
-        "total_products": len(products),
+        "stores": gated["stores"],
+        "products": gated["products"],
+        "total_products": len(gated["products"]),
         "updated_at": latest_update.isoformat() if latest_update else None,
         "source": "cache",
+        "access": gated["access"],
     }
 
 
@@ -697,4 +757,14 @@ async def refresh_prices_job(country: str = "ME") -> None:
         logger.info(f"Scheduled price refresh ({country}): persisted {len(products)} products")
     except Exception as e:
         logger.error(f"Scheduled price refresh ({country}) failed: {e}")
+        return
+
+    # New product names (new SKUs, renamed products) get translated right
+    # after the refresh; everything seen before comes from the cache.
+    try:
+        from app.services.translation_jobs import fill_translations
+
+        await fill_translations(country)
+    except Exception as e:
+        logger.error(f"Post-refresh translation ({country}) failed: {e}")
 

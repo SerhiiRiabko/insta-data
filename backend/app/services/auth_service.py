@@ -12,8 +12,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
-from app.core.tiers import DEFAULT_TIER
 from app.database.mongodb import get_mongo_db
+from app.services.subscription_service import apply_pending_grants
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -26,7 +26,7 @@ def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
 
-def create_session_token(user_id: str, email: str) -> str:
+def create_session_token(user_id: str, email: Optional[str]) -> str:
     expire = datetime.utcnow() + timedelta(days=settings.session_expire_days)
     payload = {"sub": user_id, "email": email, "exp": expire}
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
@@ -58,12 +58,11 @@ async def get_or_create_user_by_email(email: str) -> dict:
         "_id": uuid.uuid4().hex,
         "email": email,
         "password_hash": None,
-        "tier": DEFAULT_TIER,
         "is_admin": False,
         "created_at": now,
     }
     await db.users.insert_one(user)
-    return user
+    return await apply_pending_grants(user)
 
 
 async def get_current_user(request: Request) -> Optional[dict]:
