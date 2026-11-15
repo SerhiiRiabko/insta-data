@@ -57,7 +57,9 @@ class Settings(BaseSettings):
     # (any Groq-compatible free-tier key works, e.g. reuse the one already
     # used for AI enrichment in the sibling hrd-minion project).
     groq_api_key: str = ""
-    groq_model: str = "llama-3.1-8b-instant"
+    # llama-3.1-8b-instant was retired by Groq (404 since ~2026-11); of the
+    # current models gpt-oss-120b translated product names best.
+    groq_model: str = "openai/gpt-oss-120b"
     # Second AI step for batch translation: used for whatever Groq didn't
     # return (rate-limited, failed, malformed JSON). Empty = Groq only.
     anthropic_api_key: str = ""
