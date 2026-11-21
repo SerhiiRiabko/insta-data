@@ -6,8 +6,8 @@ Cross-language: every stored name is searched - the scraped source name and
 all of its translations (`name_i18n.*`) - so someone browsing Montenegrin
 stores in Ukrainian finds "Mlijeko ..." by typing "молоко". If a query still
 finds (almost) nothing (an untranslated product, a language we don't store),
-it is machine-translated into the catalog's source language and searched
-again; those translations are cached in `db.query_translations`.
+it is machine-translated into every stored language and each version is
+searched too; those translations are cached in `db.query_translations`.
 
 Every query word must match (AND). A country is a few thousand documents at
 most, so an anchored-nowhere regex scan is fast enough and, unlike `$text`,
@@ -22,7 +22,6 @@ from typing import Optional
 
 from app.database.mongodb import get_mongo_db
 from app.services.translation_service import (
-    SOURCE_LOCALE_BY_COUNTRY,
     TRANSLATION_TARGETS,
     resolve_display_name,
     translate_search_query,
@@ -52,26 +51,23 @@ async def _find(words: list[str], country: str) -> list[dict]:
     ).to_list(length=MAX_CANDIDATES)
 
 
-async def translated_query(query: str, country: str) -> Optional[str]:
-    """`query` in the country's source language (cached), or None."""
-    target = SOURCE_LOCALE_BY_COUNTRY.get(country)
-    if not target:
-        return None
+async def translated_query(query: str) -> list[str]:
+    """`query` in every stored language (cached), [] if the AI is unavailable."""
     normalized = " ".join(query.lower().split())
-    key = hashlib.sha1(f"{country}|{normalized}".encode()).hexdigest()
+    key = hashlib.sha1(f"all|{normalized}".encode()).hexdigest()
     db = get_mongo_db()
     cached = await db.query_translations.find_one({"_id": key})
     if cached:
-        return cached.get("text")
-    text = await translate_search_query(normalized, target)
-    if text is None:
-        return None  # AI unavailable right now - don't cache the miss
+        return cached.get("texts") or []
+    texts = await translate_search_query(normalized)
+    if texts is None:
+        return []  # AI unavailable right now - don't cache the miss
     await db.query_translations.update_one(
         {"_id": key},
-        {"$set": {"query": normalized, "country": country, "text": text, "created_at": datetime.utcnow()}},
+        {"$set": {"query": normalized, "texts": texts, "created_at": datetime.utcnow()}},
         upsert=True,
     )
-    return text
+    return texts
 
 
 async def search_country(query: str, country: str, lang: str, *, translate: bool = True) -> list[dict]:
@@ -83,14 +79,19 @@ async def search_country(query: str, country: str, lang: str, *, translate: bool
 
     if translate and len(docs) < MIN_DIRECT_RESULTS:
         try:
-            alt = await translated_query(query, country)
+            alternatives = await translated_query(query)
         except Exception as e:  # search must never fail because of the AI step
             logger.warning(f"Query translation failed for '{query}': {e}")
-            alt = None
-        alt_words = _words(alt) if alt else []
-        if alt_words and alt_words != words:
-            seen = {d["id"] for d in docs}
-            docs += [d for d in await _find(alt_words, country) if d["id"] not in seen]
+            alternatives = []
+        seen = {d["id"] for d in docs}
+        for alt in alternatives:
+            alt_words = _words(alt)
+            if not alt_words or alt_words == words:
+                continue
+            for doc in await _find(alt_words, country):
+                if doc["id"] not in seen:
+                    seen.add(doc["id"])
+                    docs.append(doc)
             firsts.append(alt_words[0])
 
     def rank(doc: dict) -> tuple:

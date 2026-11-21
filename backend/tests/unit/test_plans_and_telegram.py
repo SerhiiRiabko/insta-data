@@ -18,16 +18,16 @@ from app.database import mongodb
 TEST_DB = "insta_data_test_plans"
 
 
-QUERY_TRANSLATIONS = {}  # what the stubbed AI returns: {(query, target): text}
+QUERY_TRANSLATIONS = {}  # what the stubbed AI returns: {query: [versions]}
 AI_CALLS = []
 
 
 @pytest_asyncio.fixture(autouse=True)
 def no_ai(monkeypatch):
     """Search falls back to AI query translation; never call the real APIs."""
-    async def fake(query, target):
-        AI_CALLS.append((query, target))
-        return QUERY_TRANSLATIONS.get((query, target))
+    async def fake(query):
+        AI_CALLS.append(query)
+        return QUERY_TRANSLATIONS.get(query)
 
     from app.services import product_query
     monkeypatch.setattr(product_query, "translate_search_query", fake)
@@ -256,16 +256,24 @@ async def test_search_in_any_language(db):
     assert [d["id"] for d in docs] == ["p1"] and docs[0]["display_name"] == "Milk Halychyna 2.5%"
 
     AI_CALLS.clear()
-    QUERY_TRANSLATIONS[("brot", "ukr")] = "хліб"
+    # One version misses ("hleb" vs. nothing like it stored); another hits.
+    QUERY_TRANSLATIONS["brot"] = ["hleb", "хліб", "хлеб", "bread"]
     docs = await search_country("Brot", "UA", "eng")
     assert [d["id"] for d in docs] == ["p3"]
-    assert AI_CALLS == [("brot", "ukr")]
-    await search_country("brot", "UA", "ukr")
-    assert len(AI_CALLS) == 1, "second time comes from db.query_translations"
+    assert AI_CALLS == ["brot"]
+    await search_country("brot", "ME", "ukr")
+    assert len(AI_CALLS) == 1, "second time comes from db.query_translations, for any country"
 
-    assert await search_country("xyzzy", "UA", "ukr") == []  # AI has nothing - not cached
+    assert await search_country("xyzzy", "UA", "ukr") == []  # AI unavailable - not cached
     await search_country("xyzzy", "UA", "ukr")
-    assert AI_CALLS.count(("xyzzy", "ukr")) == 2
+    assert AI_CALLS.count("xyzzy") == 2
+
+
+def test_query_alternatives_dedupe_and_order():
+    from app.services.translation_service import _query_alternatives
+
+    assert _query_alternatives({"eng": "milk", "mne": "Mlijeko", "ukr": "молоко", "rus": "молоко"}) == ["Mlijeko", "молоко", "milk"]
+    assert _query_alternatives({"mne": " ", "eng": None}) == []
 
 
 async def test_list_access_members_and_editing(db):
