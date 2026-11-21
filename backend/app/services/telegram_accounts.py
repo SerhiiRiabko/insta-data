@@ -35,6 +35,9 @@ TOKEN_TTL = {
     "link": timedelta(minutes=15),
     "login": timedelta(minutes=5),
     "web_login": timedelta(minutes=10),
+    # Shopping-list invitations (list_service.create_invite): opened in the
+    # bot as t.me/<bot>?start=join_<token>.
+    "list_invite": timedelta(days=7),
 }
 
 BOT_LANG_FROM_CODE = {
@@ -158,6 +161,13 @@ async def _merge_into(target: dict, source: dict) -> None:
 
     for collection in (db.shopping_lists,):
         await collection.update_many({"owner_user_id": source["_id"]}, {"$set": {"owner_user_id": target["_id"]}})
+    # Lists shared with the Telegram-only account: membership moves along
+    # (pull first so a list shared with both doesn't list the target twice).
+    await db.shopping_lists.update_many(
+        {"member_user_ids": source["_id"], "owner_user_id": {"$ne": target["_id"]}},
+        {"$addToSet": {"member_user_ids": target["_id"]}},
+    )
+    await db.shopping_lists.update_many({"member_user_ids": source["_id"]}, {"$pull": {"member_user_ids": source["_id"]}})
     for collection in (db.payments, db.payment_requests, db.plan_events):
         await collection.update_many({"user_id": source["_id"]}, {"$set": {"user_id": target["_id"]}})
     await db.users.delete_one({"_id": source["_id"]})

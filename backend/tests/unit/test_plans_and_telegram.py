@@ -18,6 +18,23 @@ from app.database import mongodb
 TEST_DB = "insta_data_test_plans"
 
 
+QUERY_TRANSLATIONS = {}  # what the stubbed AI returns: {(query, target): text}
+AI_CALLS = []
+
+
+@pytest_asyncio.fixture(autouse=True)
+def no_ai(monkeypatch):
+    """Search falls back to AI query translation; never call the real APIs."""
+    async def fake(query, target):
+        AI_CALLS.append((query, target))
+        return QUERY_TRANSLATIONS.get((query, target))
+
+    from app.services import product_query
+    monkeypatch.setattr(product_query, "translate_search_query", fake)
+    QUERY_TRANSLATIONS.clear()
+    AI_CALLS.clear()
+
+
 @pytest_asyncio.fixture
 async def db():
     client = AsyncIOMotorClient(settings.mongodb_url, serverSelectionTimeoutMS=1500)
@@ -226,3 +243,79 @@ async def test_bot_search_ranks_exact_word_first_and_matches_translations(db):
     assert [d["id"] for d, _ in in_store(docs, 0)] == ["p1"]
     assert await search_country("a", "UA", "ukr") == []  # too short
     assert await search_country(".*", "UA", "ukr") == []  # regex metacharacters are escaped
+
+
+async def test_search_in_any_language(db):
+    """Browsing Ukrainian stores with the site in English: the query in a
+    stored translation's language matches right away; anything else is
+    translated into the catalog's language (once - then cached)."""
+    from app.services.product_query import search_country
+
+    await _seed_products(db)
+    docs = await search_country("mlijeko", "UA", "eng")  # stored mne translation, UI in eng
+    assert [d["id"] for d in docs] == ["p1"] and docs[0]["display_name"] == "Milk Halychyna 2.5%"
+
+    AI_CALLS.clear()
+    QUERY_TRANSLATIONS[("brot", "ukr")] = "хліб"
+    docs = await search_country("Brot", "UA", "eng")
+    assert [d["id"] for d in docs] == ["p3"]
+    assert AI_CALLS == [("brot", "ukr")]
+    await search_country("brot", "UA", "ukr")
+    assert len(AI_CALLS) == 1, "second time comes from db.query_translations"
+
+    assert await search_country("xyzzy", "UA", "ukr") == []  # AI has nothing - not cached
+    await search_country("xyzzy", "UA", "ukr")
+    assert AI_CALLS.count(("xyzzy", "ukr")) == 2
+
+
+async def test_list_access_members_and_editing(db):
+    from app.services import list_service
+    from app.services.list_service import ListError
+
+    await _seed_products(db)
+    gold = datetime.utcnow() + timedelta(days=5)
+    owner = await _user(db, telegram_id=1, telegram_username="owner", gold_until=gold)
+    friend = await _user(db, telegram_id=2, telegram_username="friend")
+    stranger = await _user(db, telegram_id=3)
+    doc = await list_service.create_list(owner["_id"], [{"product_id": "p1", "name": "Молоко"}], "UA", name="Дім")
+
+    assert list_service.role_of(doc, owner) == "owner"
+    with pytest.raises(ListError) as e:
+        list_service.assert_can_view(doc, None)
+    assert e.value.code == "login_required"
+    with pytest.raises(ListError) as e:
+        list_service.assert_can_view(doc, stranger)
+    assert e.value.code == "list_private"
+
+    token = await list_service.create_invite(doc["_id"], owner["_id"])
+    joined, added = await list_service.join_by_invite(token, friend)
+    assert added and list_service.role_of(joined, friend) == "member"
+    assert (await list_service.join_by_invite(token, stranger)) == (None, False)  # single use
+    assert await list_service.can_edit(joined, friend)
+    assert [d["_id"] for d in await list_service.accessible_lists(friend["_id"])] == [doc["_id"]]
+    assert (await list_service.active_list_for(friend, "UA"))["_id"] == doc["_id"]
+    assert await list_service.active_list_for(friend, "ME") is None
+    assert await list_service.members_of(joined) == [{"id": friend["_id"], "name": "@friend"}]
+
+    # The owner's Gold runs out: members can still tick, not add.
+    await db.users.update_one({"_id": owner["_id"]}, {"$set": {"gold_until": datetime.utcnow() - timedelta(days=1)}})
+    assert not await list_service.can_edit(joined, friend)
+    assert await list_service.active_list_for(friend, "UA") is None
+
+    # Chat invitations are reusable and stable per list.
+    chat_token = await list_service.chat_invite(joined)
+    assert await list_service.chat_invite(joined) == chat_token
+    assert (await list_service.join_by_invite(chat_token, stranger))[1] is True
+    assert (await list_service.join_by_invite(chat_token, stranger))[1] is False
+
+
+async def test_merge_moves_list_membership(db):
+    from app.services import list_service, telegram_accounts
+
+    owner = await _user(db, telegram_id=1)
+    bot_only = await _user(db, telegram_id=2, telegram_username="friend")
+    site = await _user(db, email="friend@example.com", password_hash="x")
+    doc = await list_service.create_list(owner["_id"], [], "UA")
+    await list_service.add_member(doc["_id"], bot_only["_id"])
+    await telegram_accounts.link_telegram(site["_id"], {"id": 2, "username": "friend", "first_name": "F"})
+    assert (await list_service.get_list_doc(doc["_id"]))["member_user_ids"] == [site["_id"]]

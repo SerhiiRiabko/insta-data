@@ -32,6 +32,7 @@ import { AccountModal } from './AccountModal';
 import { PlansModal } from './PlansModal';
 import { productsAPI, authAPI, countriesAPI, subscriptionsAPI, type Access, type Country, type CurrentUser, type Plan } from '@/lib/api';
 import { at } from '@/lib/accountText';
+import { filterBySearch, useProductSearch } from '@/lib/useProductSearch';
 import { DEFAULT_STORES, ALL_LANGS, LANG_LABEL, type Lang, type MatrixStore } from '@/lib/productMatrix';
 
 const COUNTRY_STORAGE_KEY = 'shopPriceCountry';
@@ -835,12 +836,12 @@ export function LandingPageDesignBrief() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Hero search bar - filters the price matrix below by product name
-  // (client-side: the full matrix is already loaded, no need to hit the API).
+  // Hero search bar - filters the price matrix below. Instant local match on
+  // the shown (translated) name, plus the server's cross-language search so
+  // a query in any language finds the product (see useProductSearch).
   const [searchQuery, setSearchQuery] = useState('');
-  const filteredProducts = products.filter((p: any) =>
-    !searchQuery.trim() || (p.name ?? '').toLowerCase().includes(searchQuery.trim().toLowerCase())
-  );
+  const { results: searchResults } = useProductSearch(searchQuery, country, lang);
+  const filteredProducts = filterBySearch(products as any[], searchQuery, searchResults);
 
   const t = TRANSLATIONS[lang];
 

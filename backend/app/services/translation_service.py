@@ -320,3 +320,74 @@ async def translate_batch(names: list[str], source: str, target: str) -> dict[st
     if missing:
         result.update(await _batch_claude(missing, source, target))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Search-query translation: someone browsing Montenegrin stores in Ukrainian
+# types "молоко"; the catalog is searched for the Montenegrin "mlijeko" too.
+# Used by app/services/product_query.py only when the query found (almost)
+# nothing in any stored name, and cached there per country + query.
+# ---------------------------------------------------------------------------
+
+QUERY_SYSTEM_PROMPT = (
+    "You translate search queries typed into a grocery price-comparison site. "
+    "The query can be in any language. Translate it into {target} as the word(s) "
+    "a shop would use in a product name (singular, no explanations). Keep brand "
+    "names as they are. If it is already {target}, return it unchanged."
+)
+
+
+class _QueryOut(BaseModel):
+    text: str
+
+
+async def translate_search_query(query: str, target: str) -> Optional[str]:
+    system = QUERY_SYSTEM_PROMPT.format(target=LOCALE_NAMES[target])
+    if settings.groq_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.groq_api_key}"},
+                    json={
+                        "model": settings.groq_model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": f'Reply with only {{"text": "..."}}.\n\nQuery: {query}'},
+                        ],
+                        "temperature": 0,
+                        # A one-word translation needs no deliberation; the
+                        # default effort made people wait ~7 s for results.
+                        "reasoning_effort": "low",
+                        "response_format": {"type": "json_object"},
+                    },
+                )
+            response.raise_for_status()
+            text = str(json.loads(response.json()["choices"][0]["message"]["content"]).get("text", "")).strip()
+            if text:
+                return text[:100]
+        except Exception as e:
+            logger.info(f"Groq query translation failed for '{query}': {e}")
+
+    if not settings.anthropic_api_key:
+        return None
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    try:
+        response = await client.messages.parse(
+            model=settings.anthropic_model,
+            max_tokens=200,
+            system=system,
+            messages=[{"role": "user", "content": query}],
+            output_config={"effort": "low"},
+            output_format=_QueryOut,
+        )
+    except anthropic.APIError as e:
+        logger.warning(f"Claude query translation failed for '{query}': {e}")
+        return None
+    finally:
+        await client.close()
+    if response.parsed_output is None:
+        return None
+    return response.parsed_output.text.strip()[:100] or None

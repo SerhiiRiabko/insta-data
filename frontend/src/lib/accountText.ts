@@ -136,10 +136,10 @@ const TEXT = {
   send: { ukr: 'Надіслати', rus: 'Отправить', eng: 'Send', mne: 'Pošalji' },
   sent: { ukr: '✓ Надіслано', rus: '✓ Отправлено', eng: '✓ Sent', mne: '✓ Poslato' },
   userNotFound: {
-    ukr: 'Цей користувач ще не запускав @{bot}. Попросіть його відкрити бота або надішліть посилання кнопкою «Надіслати в Telegram».',
-    rus: 'Этот пользователь ещё не запускал @{bot}. Попросите его открыть бота или отправьте ссылку кнопкой «Отправить в Telegram».',
-    eng: 'This user hasn’t started @{bot} yet. Ask them to open the bot, or send the link with “Send via Telegram”.',
-    mne: 'Ovaj korisnik još nije pokrenuo @{bot}. Zamolite ga da otvori bot ili pošaljite link dugmetom „Pošalji u Telegram“.',
+    ukr: 'Цей користувач ще не запускав @{bot}. Попросіть його відкрити бота або надішліть запрошення кнопкою «Запросити через Telegram».',
+    rus: 'Этот пользователь ещё не запускал @{bot}. Попросите его открыть бота или отправьте приглашение кнопкой «Пригласить через Telegram».',
+    eng: 'This user hasn’t started @{bot} yet. Ask them to open the bot, or send an invitation with “Invite via Telegram”.',
+    mne: 'Ovaj korisnik još nije pokrenuo @{bot}. Zamolite ga da otvori bot ili pošaljite pozivnicu dugmetom „Pozovi preko Telegrama“.',
   },
   shareMessage: {
     ukr: 'Мій список покупок — відмічайте, що вже купили:',
@@ -149,6 +149,76 @@ const TEXT = {
   },
 
   cheapestTotal: { ukr: 'Найдешевше разом', rus: 'Дешевле всего вместе', eng: 'Cheapest total', mne: 'Najjeftinije ukupno' },
+
+  // Private shared lists
+  listPrivate: {
+    ukr: '🔒 Це приватний список. Його бачать лише власник і ті, з ким він поділився через Telegram-бота.',
+    rus: '🔒 Это приватный список. Его видят только владелец и те, с кем он поделился через Telegram-бота.',
+    eng: '🔒 This list is private — only its owner and the people they shared it with via the Telegram bot can see it.',
+    mne: '🔒 Ovo je privatna lista — vide je samo vlasnik i oni sa kojima ju je podijelio preko Telegram bota.',
+  },
+  listLoginHint: {
+    ukr: 'Якщо список надіслали вам — увійдіть через той самий Telegram.',
+    rus: 'Если список прислали вам — войдите через тот же Telegram.',
+    eng: 'If it was shared with you, log in with that same Telegram.',
+    mne: 'Ako je lista podijeljena sa vama, prijavite se istim Telegramom.',
+  },
+  listNoAccess: {
+    ukr: 'Ваш акаунт не має доступу. Попросіть власника поділитися списком із вашим Telegram.',
+    rus: 'У вашего аккаунта нет доступа. Попросите владельца поделиться списком с вашим Telegram.',
+    eng: 'Your account has no access. Ask the owner to share the list with your Telegram.',
+    mne: 'Vaš nalog nema pristup. Zamolite vlasnika da podijeli listu sa vašim Telegramom.',
+  },
+  listNotFound: { ukr: 'Список не знайдено.', rus: 'Список не найден.', eng: 'List not found.', mne: 'Lista nije pronađena.' },
+  sharedBy: { ukr: 'Спільний список від {owner}', rus: 'Общий список от {owner}', eng: 'Shared by {owner}', mne: 'Zajednička lista od {owner}' },
+  sharedShort: { ukr: 'від {owner}', rus: 'от {owner}', eng: 'by {owner}', mne: 'od {owner}' },
+  members: { ukr: 'Учасники', rus: 'Участники', eng: 'Members', mne: 'Članovi' },
+  noMembers: {
+    ukr: 'Поки що список бачите лише ви.',
+    rus: 'Пока список видите только вы.',
+    eng: 'Only you can see this list so far.',
+    mne: 'Za sada samo vi vidite ovu listu.',
+  },
+  remove: { ukr: 'Прибрати', rus: 'Убрать', eng: 'Remove', mne: 'Ukloni' },
+  leaveList: { ukr: 'Вийти зі списку', rus: 'Выйти из списка', eng: 'Leave the list', mne: 'Napusti listu' },
+  inviteTelegram: { ukr: 'Запросити через Telegram', rus: 'Пригласить через Telegram', eng: 'Invite via Telegram', mne: 'Pozovi preko Telegrama' },
+  inviteHint: {
+    ukr: 'Одноразове посилання на 7 днів: хто відкриє його в боті, стане учасником списку.',
+    rus: 'Одноразовая ссылка на 7 дней: кто откроет её в боте, станет участником списка.',
+    eng: 'A single-use link, valid 7 days: whoever opens it in the bot joins the list.',
+    mne: 'Jednokratan link na 7 dana: ko ga otvori u botu, postaje član liste.',
+  },
+  addMemberLabel: {
+    ukr: 'Поділитися з користувачем Telegram',
+    rus: 'Поделиться с пользователем Telegram',
+    eng: 'Share with a Telegram user',
+    mne: 'Podijeli sa Telegram korisnikom',
+  },
+  memberAdded: { ukr: '✓ Додано — список надіслано в бот', rus: '✓ Добавлен — список отправлен в бот', eng: '✓ Added — the list was sent to the bot', mne: '✓ Dodato — lista je poslata u bot' },
+  addProducts: { ukr: 'Додати товар', rus: 'Добавить товар', eng: 'Add a product', mne: 'Dodaj proizvod' },
+  addSearchPlaceholder: {
+    ukr: 'Назва товару будь-якою мовою…',
+    rus: 'Название товара на любом языке…',
+    eng: 'Product name, in any language…',
+    mne: 'Naziv proizvoda na bilo kom jeziku…',
+  },
+  searching: { ukr: 'Шукаємо…', rus: 'Ищем…', eng: 'Searching…', mne: 'Tražimo…' },
+  nothingFound: { ukr: 'Нічого не знайдено', rus: 'Ничего не найдено', eng: 'Nothing found', mne: 'Ništa nije pronađeno' },
+  inList: { ukr: '✓ У списку', rus: '✓ В списке', eng: '✓ On the list', mne: '✓ Na listi' },
+  readOnly: {
+    ukr: 'Додавати товари зараз не можна: у власника списку закінчився тариф Gold.',
+    rus: 'Добавлять товары сейчас нельзя: у владельца списка закончился тариф Gold.',
+    eng: 'Products can’t be added right now: the list owner’s Gold plan has ended.',
+    mne: 'Proizvodi se trenutno ne mogu dodavati: vlasniku liste je istekao Gold paket.',
+  },
+  copyLink: { ukr: 'Копіювати посилання', rus: 'Копировать ссылку', eng: 'Copy link', mne: 'Kopiraj link' },
+  linkCopied: { ukr: 'Скопійовано!', rus: 'Скопировано!', eng: 'Copied!', mne: 'Kopirano!' },
+  syncHint: {
+    ukr: 'Зміни з Telegram-бота з’являються тут автоматично.',
+    rus: 'Изменения из Telegram-бота появляются здесь автоматически.',
+    eng: 'Changes made in the Telegram bot show up here automatically.',
+    mne: 'Izmjene iz Telegram bota se ovdje pojavljuju automatski.',
+  },
 
   telegramLogin: { ukr: 'Увійти через Telegram', rus: 'Войти через Telegram', eng: 'Log in with Telegram', mne: 'Prijava putem Telegrama' },
   confirmLoginInTelegram: {

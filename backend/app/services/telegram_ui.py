@@ -45,7 +45,10 @@ def list_message_text(resolved: dict, lang: Optional[str]) -> str:
     return "\n".join(lines)
 
 
-def list_keyboard(resolved: dict, lang: Optional[str], *, owner: bool) -> dict:
+def list_keyboard(resolved: dict, lang: Optional[str], *, role: Optional[str], join_url: Optional[str] = None) -> dict:
+    """`role`: "owner" (share + invite buttons), "member" (leave button),
+    "chat" (a message posted into some chat via inline mode: `join_url`
+    lets people there open the list in the bot), anything else = plain."""
     rows = []
     for index, item in enumerate(resolved["items"]):
         mark = "☑️" if item["checked"] else "⬜"
@@ -56,11 +59,18 @@ def list_keyboard(resolved: dict, lang: Optional[str], *, owner: bool) -> dict:
                 price += f" {item['cheapest_store']}"
         rows.append([{"text": f"{mark} {_short(item['name'])}{price}", "callback_data": f"lt:{resolved['id']}:{index}"}])
 
+    if role == "owner":
+        rows.append([
+            {"text": t(lang, "btn_invite"), "callback_data": f"li:{resolved['id']}"},
+            {"text": t(lang, "btn_share_list"), "switch_inline_query": f"list {resolved['id']}"},
+        ])
     footer = []
-    if owner:
-        footer.append({"text": t(lang, "btn_share_list"), "switch_inline_query": f"list {resolved['id']}"})
-    if site_url_usable():
+    if role == "chat" and join_url:
+        footer.append({"text": t(lang, "btn_open_in_bot"), "url": join_url})
+    elif site_url_usable():
         footer.append({"text": t(lang, "btn_list_site"), "url": site_list_url(resolved["id"], lang)})
+    if role == "member":
+        footer.append({"text": t(lang, "btn_leave"), "callback_data": f"lx:{resolved['id']}"})
     if footer:
         rows.append(footer)
     return {"inline_keyboard": rows}

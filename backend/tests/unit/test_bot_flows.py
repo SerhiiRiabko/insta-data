@@ -79,8 +79,13 @@ async def env(monkeypatch):
             return {"message_id": 1}
         return True
 
-    from app.services import telegram_api
+    from app.services import product_query, telegram_api
     monkeypatch.setattr(telegram_api, "call", fake_call)
+
+    async def no_ai(query, target):
+        return None
+
+    monkeypatch.setattr(product_query, "translate_search_query", no_ai)
     monkeypatch.setattr(settings, "admin_telegram_usernames", "boss_admin")
 
     from app.services import telegram_accounts
@@ -172,7 +177,7 @@ async def test_paid_users_compare_and_gold_adds_to_list(env):
     add = [b for b in buttons(gold) if b.callback_data.startswith("sa:")]
     assert [b.text for b in add] == ["➕1", "➕2"]
     await press(env, add[0].callback_data, message_id=1)
-    assert "Додано" in session.of(AnswerCallbackQuery)[-1].text
+    assert "→ «Мій список»" in session.of(AnswerCallbackQuery)[-1].text
     await press(env, add[0].callback_data, message_id=1)
     assert "уже є у списку" in session.of(AnswerCallbackQuery)[-1].text
 
@@ -185,6 +190,65 @@ async def test_paid_users_compare_and_gold_adds_to_list(env):
     assert any(b.switch_inline_query for b in buttons(shown)), "owner gets the share button"
     await press(env, toggle.callback_data, message_id=1)
     assert "куплено 1/1" in session.of(EditMessageText)[-1].text
+
+
+FRIEND_ID, STRANGER_ID = 555003, 555004
+
+
+async def test_shared_list_invite_join_and_fill(env):
+    db, session = env["db"], env["session"]
+    await say(env, "/start")
+    await db.users.update_one({"telegram_id": CHAT_ID}, {"$set": {"country": "UA", "gold_until": datetime.utcnow() + timedelta(days=5)}})
+    await say(env, "молоко")
+    add = [b for b in buttons(session.of(SendMessage)[-1]) if b.callback_data.startswith("sa:")]
+    await press(env, add[0].callback_data, message_id=1)
+    list_doc = await db.shopping_lists.find_one({})
+
+    # Strangers can't open it, neither by deep link nor by a toggle callback.
+    await say(env, f"/start list_{list_doc['_id']}", uid=STRANGER_ID, username="stranger")
+    assert "приватний" in session.of(SendMessage)[-1].text
+    await press(env, f"lt:{list_doc['_id']}:0", message_id=1, uid=STRANGER_ID, username="stranger")
+    assert (await db.shopping_lists.find_one({}))["items"][0]["checked"] is False
+
+    # The owner creates a single-use invitation.
+    await press(env, f"li:{list_doc['_id']}", message_id=1)
+    invite = session.of(SendMessage)[-1]
+    assert "start=join_" in invite.text and buttons(invite)[0].url.startswith("https://t.me/share/url?")
+    token = invite.text.split("start=join_")[1].split()[0]
+
+    # A free user joins with it: the owner is told, the list opens with a leave button.
+    await say(env, f"/start join_{token}", uid=FRIEND_ID, username="friend")
+    joined = session.of(SendMessage)[-1]
+    assert "Вас додано до списку від @shopper" in joined.text
+    assert any(b.callback_data == f"lx:{list_doc['_id']}" for b in buttons(joined))
+    assert any(m.chat_id == CHAT_ID and "@friend приєднався" in m.text for m in session.of(SendMessage))
+    friend = await db.users.find_one({"telegram_id": FRIEND_ID})
+    assert friend["_id"] in (await db.shopping_lists.find_one({}))["member_user_ids"]
+
+    # Used up: the stranger can't reuse it.
+    await say(env, f"/start join_{token}", uid=STRANGER_ID, username="stranger")
+    assert "Запрошення недійсне" in session.of(SendMessage)[-1].text
+
+    # The member ticks an item and fills the list from a one-store search.
+    await press(env, f"lt:{list_doc['_id']}:0", message_id=1, uid=FRIEND_ID, username="friend")
+    assert (await db.shopping_lists.find_one({}))["items"][0]["checked"] is True
+    await db.users.update_one({"telegram_id": FRIEND_ID}, {"$set": {"country": "UA"}})
+    await say(env, "молоко", uid=FRIEND_ID, username="friend")
+    choice = session.of(SendMessage)[-1]
+    silpo = next(b for b in buttons(choice) if b.text.startswith("Сільпо"))
+    await press(env, silpo.callback_data, message_id=1, uid=FRIEND_ID, username="friend")
+    store_answer = session.of(EditMessageText)[-1]
+    plus = [b for b in buttons(store_answer) if b.callback_data.startswith("sa:")]
+    assert [b.text for b in plus] == ["➕1", "➕2"]
+    await press(env, plus[1].callback_data, message_id=1, uid=FRIEND_ID, username="friend")
+    assert [i["product_id"] for i in (await db.shopping_lists.find_one({}))["items"]] == ["p1", "p2"]
+
+    await say(env, "/lists", uid=FRIEND_ID, username="friend")
+    assert buttons(session.of(SendMessage)[-1])[0].text.startswith("👥 Мій список · 2 · від @shopper")
+
+    # Leaving removes access again.
+    await press(env, f"lx:{list_doc['_id']}", message_id=1, uid=FRIEND_ID, username="friend")
+    assert (await db.shopping_lists.find_one({}))["member_user_ids"] == []
 
 
 async def test_stars_offer_and_admin_approves_site_card_request(env):

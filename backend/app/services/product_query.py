@@ -1,47 +1,103 @@
-"""Product search for the Telegram bot: one country's persisted catalog
-(the same documents /products/matrix-cached serves), matched on the source
-name and the translated name for the user's language, ranked by relevance.
+"""Product search shared by the Telegram bot and the website
+(GET /products/search): one country's persisted catalog (the same documents
+/products/matrix-cached serves), ranked by relevance.
+
+Cross-language: every stored name is searched - the scraped source name and
+all of its translations (`name_i18n.*`) - so someone browsing Montenegrin
+stores in Ukrainian finds "Mlijeko ..." by typing "молоко". If a query still
+finds (almost) nothing (an untranslated product, a language we don't store),
+it is machine-translated into the catalog's source language and searched
+again; those translations are cached in `db.query_translations`.
 
 Every query word must match (AND). A country is a few thousand documents at
 most, so an anchored-nowhere regex scan is fast enough and, unlike `$text`,
 handles Cyrillic substrings ("молок" finds "молоко").
 """
 
+import hashlib
+import logging
 import re
+from datetime import datetime
 from typing import Optional
 
 from app.database.mongodb import get_mongo_db
-from app.services.translation_service import LOCALE_FALLBACK, resolve_display_name
+from app.services.translation_service import (
+    SOURCE_LOCALE_BY_COUNTRY,
+    TRANSLATION_TARGETS,
+    resolve_display_name,
+    translate_search_query,
+)
+
+logger = logging.getLogger(__name__)
 
 MAX_CANDIDATES = 500
+# Fewer direct hits than this and the query is also translated.
+MIN_DIRECT_RESULTS = 3
+SEARCH_LOCALES = sorted({locale for targets in TRANSLATION_TARGETS.values() for locale in targets} | {"ukr"})
+PROJECTION = {"id": 1, "name": 1, "name_i18n": 1, "unit": 1, "prices": 1, "promo": 1, "category": 1, "image_url": 1}
 
 
 def _words(query: str) -> list[str]:
     return [w for w in re.split(r"\s+", query.strip().lower()) if len(w) >= 2][:5]
 
 
-async def search_country(query: str, country: str, lang: str) -> list[dict]:
-    words = _words(query)
-    if not words:
-        return []
-    locale = LOCALE_FALLBACK.get(lang, lang)
-    fields = ["name", f"name_i18n.{locale}"]
+async def _find(words: list[str], country: str) -> list[dict]:
+    fields = ["name"] + [f"name_i18n.{locale}" for locale in SEARCH_LOCALES]
     conditions = [
         {"$or": [{field: {"$regex": re.escape(word), "$options": "i"}} for field in fields]}
         for word in words
     ]
-    docs = await get_mongo_db().products.find(
-        {"country": country, "$and": conditions},
-        {"id": 1, "name": 1, "name_i18n": 1, "unit": 1, "prices": 1, "promo": 1, "category": 1},
+    return await get_mongo_db().products.find(
+        {"country": country, "$and": conditions}, PROJECTION
     ).to_list(length=MAX_CANDIDATES)
 
-    first = words[0]
+
+async def translated_query(query: str, country: str) -> Optional[str]:
+    """`query` in the country's source language (cached), or None."""
+    target = SOURCE_LOCALE_BY_COUNTRY.get(country)
+    if not target:
+        return None
+    normalized = " ".join(query.lower().split())
+    key = hashlib.sha1(f"{country}|{normalized}".encode()).hexdigest()
+    db = get_mongo_db()
+    cached = await db.query_translations.find_one({"_id": key})
+    if cached:
+        return cached.get("text")
+    text = await translate_search_query(normalized, target)
+    if text is None:
+        return None  # AI unavailable right now - don't cache the miss
+    await db.query_translations.update_one(
+        {"_id": key},
+        {"$set": {"query": normalized, "country": country, "text": text, "created_at": datetime.utcnow()}},
+        upsert=True,
+    )
+    return text
+
+
+async def search_country(query: str, country: str, lang: str, *, translate: bool = True) -> list[dict]:
+    words = _words(query)
+    if not words:
+        return []
+    docs = await _find(words, country)
+    firsts = [words[0]]
+
+    if translate and len(docs) < MIN_DIRECT_RESULTS:
+        try:
+            alt = await translated_query(query, country)
+        except Exception as e:  # search must never fail because of the AI step
+            logger.warning(f"Query translation failed for '{query}': {e}")
+            alt = None
+        alt_words = _words(alt) if alt else []
+        if alt_words and alt_words != words:
+            seen = {d["id"] for d in docs}
+            docs += [d for d in await _find(alt_words, country) if d["id"] not in seen]
+            firsts.append(alt_words[0])
 
     def rank(doc: dict) -> tuple:
         display = resolve_display_name(doc, lang).lower()
-        source = doc.get("name", "").lower()
-        starts = display.startswith(first) or source.startswith(first)
-        whole = bool(re.search(rf"(^|\W){re.escape(first)}(\W|$)", f"{display} {source}"))
+        names = " ".join([display, doc.get("name", "").lower(), *(v.lower() for v in (doc.get("name_i18n") or {}).values())])
+        starts = any(display.startswith(f) or doc.get("name", "").lower().startswith(f) for f in firsts)
+        whole = any(re.search(rf"(^|\W){re.escape(f)}(\W|$)", names) for f in firsts)
         stores_with_price = sum(1 for p in (doc.get("prices") or []) if p is not None)
         return (0 if starts else 1 if whole else 2, -stores_with_price, len(display))
 
