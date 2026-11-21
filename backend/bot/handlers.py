@@ -13,19 +13,23 @@ only payment method inside the bot (Telegram's rule for digital goods).
 Card transfers are offered on the website; admins approve them here
 (pr: buttons). One account for bot + site, see app/services/telegram_accounts.py.
 
-Lists (/lists, Gold): tick-off buttons; "share to a chat" uses inline mode
-(@bot in any chat) - anyone in that chat can tick items, and the state is the
-same list the website shows.
+Lists (/lists): private to the owner and the people it's shared with (see
+app/services/list_service.py). The owner (Gold) invites with a single-use
+link (👥, start=join_<token>), from the website by @username, or posts the
+list into a chat via inline mode - people in that chat join by tapping it.
+Members tick items and fill the list from search (➕ adds to the list opened
+last); the state is the same list the website shows.
 
 callback_data prefixes: c country, l language, ss store pick, sa add to
-list, plan, buy Stars payment, lo open list, lt toggle list item,
-lk/lg confirm link/login, pr admin decision on a card payment.
+list, plan, buy Stars payment, lo open list, lt toggle list item, li invite,
+lx leave a list, lk/lg confirm link/login, pr admin decision on a card payment.
 """
 
 import html
 import logging
 import secrets
 from datetime import datetime
+from urllib.parse import urlencode
 from typing import Any, Awaitable, Callable, Optional
 
 from aiogram import BaseMiddleware, Bot, F, Router
@@ -153,6 +157,8 @@ async def cmd_start(message: Message, command: CommandObject, user: dict, bot: B
         return await start_login(message, user, payload[len("login_"):])
     if payload.startswith("list_"):
         return await send_list(message, user, payload[len("list_"):])
+    if payload.startswith("join_"):
+        return await join_list(message, user, bot, payload[len("join_"):])
     if payload == "plan":
         return await show_plans(message, user)
 
@@ -364,12 +370,9 @@ async def run_search(chat_id: int, bot: Bot, user: dict, query: str) -> None:
     })
 
     if can_compare(user):
-        gold = can_use_lists(user)
-        rows = []
-        if gold:
-            buttons = [{"text": f"➕{n}", "callback_data": f"sa:{sid}:{n - 1}"} for n in range(1, min(len(docs), RESULTS_PER_MESSAGE) + 1)]
-            rows = [buttons[i:i + 5] for i in range(0, len(buttons), 5)]
-        await bot.send_message(chat_id, compare_text(docs, stores, query, lang, country, gold), reply_markup=kb(rows) if rows else None)
+        can_add = can_use_lists(user) or await list_service.active_list_for(user, country) is not None
+        rows = add_buttons(sid, list(range(min(len(docs), RESULTS_PER_MESSAGE)))) if can_add else []
+        await bot.send_message(chat_id, compare_text(docs, stores, query, lang, country, can_add), reply_markup=kb(rows) if rows else None)
         return
 
     counts = store_counts(docs, len(stores))
@@ -384,6 +387,13 @@ async def run_search(chat_id: int, bot: Bot, user: dict, query: str) -> None:
     await safe_delete(bot, chat_id, user.get("bot_choice_msg_id"))
     sent = await bot.send_message(chat_id, t(lang, "choose_store", q=html.escape(query), n=len(docs)), reply_markup=kb(rows))
     await set_user(user, bot_choice_msg_id=sent.message_id)
+
+
+def add_buttons(sid: str, positions: list[int]) -> list[list[dict]]:
+    """➕1 ➕2 … for the numbered results; `positions` index the search's
+    product_ids (what sa: callbacks carry)."""
+    buttons = [{"text": f"➕{n}", "callback_data": f"sa:{sid}:{pos}"} for n, pos in enumerate(positions, start=1)]
+    return [buttons[i:i + 5] for i in range(0, len(buttons), 5)]
 
 
 async def _search_docs(search: dict, lang: str) -> list[dict]:
@@ -417,7 +427,14 @@ async def on_store_pick(callback: CallbackQuery, user: dict, bot: Bot):
     previous = user.get("bot_answer_msg_id")
     if previous and previous != callback.message.message_id:
         await safe_delete(bot, chat_id, previous)
-    await callback.message.edit_text(store_text(docs, stores, index, search["query"], lang, search["country"]), reply_markup=None)
+    # The store buttons go away; someone filling a (shared) list gets ➕
+    # buttons for the products shown instead.
+    markup = None
+    if await list_service.active_list_for(user, search["country"]) is not None:
+        position = {pid: pos for pos, pid in enumerate(search["product_ids"])}
+        shown = [position[doc["id"]] for doc, _ in in_store(docs, index)[:RESULTS_PER_MESSAGE]]
+        markup = kb(add_buttons(sid, shown))
+    await callback.message.edit_text(store_text(docs, stores, index, search["query"], lang, search["country"]), reply_markup=markup)
     await set_user(user, bot_answer_msg_id=callback.message.message_id, bot_choice_msg_id=None)
     await callback.answer()
 
@@ -426,10 +443,6 @@ async def on_store_pick(callback: CallbackQuery, user: dict, bot: Bot):
 async def on_add_to_list(callback: CallbackQuery, user: dict):
     _, sid, position = callback.data.split(":")
     lang = lang_of(user)
-    if not can_use_lists(user):
-        await callback.answer()
-        await send_gold_required(callback.message, user)
-        return
     search = await get_mongo_db().bot_searches.find_one({"_id": sid, "user_id": user["_id"]})
     position = int(position)
     if not search or position >= len(search["product_ids"]):
@@ -441,13 +454,18 @@ async def on_add_to_list(callback: CallbackQuery, user: dict):
         await callback.answer(t(lang, "query_expired"), show_alert=True)
         return
     try:
-        target = await list_service.active_list_for(user["_id"], search["country"], t(lang, "list_untitled"))
-        _, added = await list_service.add_item(target["_id"], product["id"], product["name"], product.get("unit", ""))
+        target = await list_service.active_list_for(user, search["country"], t(lang, "list_untitled"))
     except ListError:
         await callback.answer("⚠️", show_alert=True)
         return
+    if target is None:
+        await callback.answer()
+        await send_gold_required(callback.message, user)
+        return
+    _, added = await list_service.add_item(target["_id"], product["id"], product["name"], product.get("unit", ""))
     name = resolve_display_name(product, lang)
-    await callback.answer(t(lang, "added_to_list", item=name[:150]) if added else t(lang, "already_in_list"))
+    list_name = target.get("name") or t(lang, "list_untitled")
+    await callback.answer(t(lang, "added_to_named_list", item=name[:100], list=list_name[:50]) if added else t(lang, "already_in_list"))
 
 
 # ---------------------------------------------------------------------------
@@ -557,32 +575,74 @@ async def on_successful_payment(message: Message, user: dict):
 # Shopping lists
 # ---------------------------------------------------------------------------
 
-async def send_list(message: Message, user: dict, list_id: str) -> None:
+def list_markup(resolved: dict, lang: str, role: Optional[str]) -> InlineKeyboardMarkup:
+    # Only the owner (with Gold) gets the share/invite buttons; admins
+    # looking at someone's list get the plain view.
+    return kb(list_keyboard(resolved, lang, role=role if role in ("owner", "member") else None)["inline_keyboard"])
+
+
+async def send_list(message: Message, user: dict, list_id: str, *, intro: str = "") -> None:
     lang = lang_of(user)
     try:
         doc = await list_service.get_list_doc(list_id)
     except ListError:
         await message.answer(t(lang, "token_invalid"))
         return
+    role = list_service.role_of(doc, user)
+    if role is None:
+        await message.answer(t(lang, "list_private"))
+        return
+    if role == "owner" and not can_use_lists(user):
+        role = "owner_expired"
     resolved = await list_service.resolve_list(doc, lang)
-    owner = doc.get("owner_user_id") == user["_id"] and can_use_lists(user)
-    await message.answer(list_message_text(resolved, lang), reply_markup=kb(list_keyboard(resolved, lang, owner=owner)["inline_keyboard"]))
+    text = list_message_text(resolved, lang)
+    if role != "guest" and await list_service.can_edit(doc, user):
+        await list_service.set_active_list(user, doc["_id"])
+        text += "\n\n" + t(lang, "active_list_hint")
+    await message.answer((intro + "\n\n" if intro else "") + text, reply_markup=list_markup(resolved, lang, role))
+
+
+async def join_list(message: Message, user: dict, bot: Bot, token: str) -> None:
+    lang = lang_of(user)
+    doc, added = await list_service.join_by_invite(token, user)
+    if not doc:
+        await message.answer(t(lang, "invite_invalid"))
+        return
+    owner_name = await list_service.owner_name(doc) or "—"
+    if added and doc.get("owner_user_id"):
+        owner = await get_mongo_db().users.find_one({"_id": doc["owner_user_id"]})
+        if owner and owner.get("telegram_id"):
+            owner_lang = lang_of(owner)
+            try:
+                await bot.send_message(owner["telegram_id"], t(
+                    owner_lang, "member_joined",
+                    member=html.escape(list_service._display(user)),
+                    name=html.escape(doc.get("name") or t(owner_lang, "list_untitled")),
+                ))
+            except TelegramBadRequest:
+                pass
+    intro = t(lang, "join_done", owner=html.escape(owner_name)) if added else ""
+    await send_list(message, user, doc["_id"], intro=intro)
 
 
 @router.message(Command("lists"))
 async def cmd_lists(message: Message, user: dict):
     lang = lang_of(user)
-    if not can_use_lists(user):
-        await send_gold_required(message, user)
-        return
-    docs = await list_service.owned_lists(user["_id"], limit=20)
+    docs = await list_service.accessible_lists(user["_id"], limit=30)
     if not docs:
-        await message.answer(t(lang, "lists_empty"))
+        if can_use_lists(user):
+            await message.answer(t(lang, "lists_empty"))
+        else:
+            await send_gold_required(message, user)
         return
-    rows = [
-        [{"text": f"{doc.get('name') or t(lang, 'list_untitled')} · {len(doc['items'])}", "callback_data": f"lo:{doc['_id']}"}]
-        for doc in docs
-    ]
+    rows = []
+    for doc in docs:
+        label = f"{doc.get('name') or t(lang, 'list_untitled')} · {len(doc['items'])}"
+        if doc.get("owner_user_id") != user["_id"]:
+            label = f"👥 {label} · {t(lang, 'list_shared_by', owner=await list_service.owner_name(doc) or '—')}"
+        elif doc.get("member_user_ids"):
+            label = f"👥 {label}"
+        rows.append([{"text": label[:60], "callback_data": f"lo:{doc['_id']}"}])
     await message.answer(t(lang, "lists_title"), reply_markup=kb(rows))
 
 
@@ -592,9 +652,68 @@ async def on_open_list(callback: CallbackQuery, user: dict):
     await send_list(callback.message, user, callback.data.split(":", 1)[1])
 
 
+@router.callback_query(F.data.startswith("li:"))
+async def on_invite(callback: CallbackQuery, user: dict):
+    lang = lang_of(user)
+    list_id = callback.data.split(":", 1)[1]
+    try:
+        doc = await list_service.get_list_doc(list_id)
+    except ListError:
+        await callback.answer("⚠️")
+        return
+    if list_service.role_of(doc, user) != "owner":
+        await callback.answer("⛔", show_alert=True)
+        return
+    if not can_use_lists(user):
+        await callback.answer()
+        await send_gold_required(callback.message, user)
+        return
+    await callback.answer()
+    token = await list_service.create_invite(list_id, user["_id"])
+    url = telegram_api.bot_link(f"join_{token}")
+    name = doc.get("name") or t(lang, "list_untitled")
+    share = "https://t.me/share/url?" + urlencode({"url": url, "text": t(lang, "invite_share_text", name=name)})
+    await callback.message.answer(
+        t(lang, "invite_text", name=html.escape(name), url=url),
+        reply_markup=kb([[{"text": t(lang, "btn_send_invite"), "url": share}]]),
+        disable_web_page_preview=True,
+    )
+
+
+@router.callback_query(F.data.startswith("lx:"))
+async def on_leave(callback: CallbackQuery, user: dict):
+    lang = lang_of(user)
+    list_id = callback.data.split(":", 1)[1]
+    await list_service.remove_member(list_id, user["_id"])
+    if user.get("active_list_id") == list_id:
+        await set_user(user, active_list_id=None)
+    await callback.answer()
+    try:
+        await callback.message.edit_text(t(lang, "left_list"), reply_markup=None)
+    except TelegramBadRequest:
+        pass
+
+
 @router.callback_query(F.data.startswith("lt:"))
 async def on_toggle_item(callback: CallbackQuery, user: Optional[dict], bot: Bot):
     _, list_id, index = callback.data.split(":")
+    lang = lang_of(user)
+    try:
+        doc = await list_service.get_list_doc(list_id)
+    except ListError:
+        await callback.answer("⚠️")
+        return
+
+    if list_service.role_of(doc, user) is None:
+        # Someone in a chat the list was posted into: send them to the bot,
+        # where the chat invitation adds them (only the people of that chat
+        # ever see it). Anywhere else - no access.
+        if callback.inline_message_id and doc.get("chat_invite_token"):
+            await callback.answer(url=telegram_api.bot_link(f"join_{doc['chat_invite_token']}"))
+        else:
+            await callback.answer(t(lang, "list_private"), show_alert=True)
+        return
+
     try:
         doc = await list_service.toggle_item(list_id, index=int(index))
     except ListError:
@@ -602,22 +721,24 @@ async def on_toggle_item(callback: CallbackQuery, user: Optional[dict], bot: Bot
         return
 
     if callback.inline_message_id:
-        # Shared into some chat via inline mode: everyone there sees one
+        # Posted into some chat via inline mode: everyone there sees one
         # message, so render it in the owner's language, without owner tools.
         owner = await get_mongo_db().users.find_one({"_id": doc.get("owner_user_id")}) if doc.get("owner_user_id") else None
         lang = lang_of(owner or user)
         resolved = await list_service.resolve_list(doc, lang)
-        markup = kb(list_keyboard(resolved, lang, owner=False)["inline_keyboard"])
+        join_url = telegram_api.bot_link(f"join_{doc['chat_invite_token']}") if doc.get("chat_invite_token") else None
+        markup = kb(list_keyboard(resolved, lang, role="chat", join_url=join_url)["inline_keyboard"])
         try:
             await bot.edit_message_text(text=list_message_text(resolved, lang), inline_message_id=callback.inline_message_id, reply_markup=markup)
         except TelegramBadRequest:
             pass
     else:
-        lang = lang_of(user)
         resolved = await list_service.resolve_list(doc, lang)
-        owner = bool(user) and doc.get("owner_user_id") == user["_id"] and can_use_lists(user)
+        role = list_service.role_of(doc, user)
+        if role == "owner" and not can_use_lists(user):
+            role = "owner_expired"
         try:
-            await callback.message.edit_text(list_message_text(resolved, lang), reply_markup=kb(list_keyboard(resolved, lang, owner=owner)["inline_keyboard"]))
+            await callback.message.edit_text(list_message_text(resolved, lang), reply_markup=list_markup(resolved, lang, role))
         except TelegramBadRequest:
             pass
     await callback.answer()
@@ -642,12 +763,13 @@ async def on_inline_query(query: InlineQuery, user: dict):
     results = []
     for doc in docs:
         resolved = await list_service.resolve_list(doc, lang)
+        join_url = telegram_api.bot_link(f"join_{await list_service.chat_invite(doc)}")
         results.append(InlineQueryResultArticle(
             id=doc["_id"],
             title=doc.get("name") or t(lang, "list_untitled"),
             description=f"{len(resolved['items'])} · {format_price(resolved['total_cheapest'], resolved['country'])}",
             input_message_content=InputTextMessageContent(message_text=list_message_text(resolved, lang), parse_mode="HTML"),
-            reply_markup=kb(list_keyboard(resolved, lang, owner=False)["inline_keyboard"]),
+            reply_markup=kb(list_keyboard(resolved, lang, role="chat", join_url=join_url)["inline_keyboard"]),
         ))
     await query.answer(results, cache_time=0, is_personal=True)
 

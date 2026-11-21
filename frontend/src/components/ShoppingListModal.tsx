@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { listsAPI, type Country, type CurrentUser } from '@/lib/api';
 import { at } from '@/lib/accountText';
+import { filterBySearch, useProductSearch } from '@/lib/useProductSearch';
 import { getSessionId, loadCart, saveCart, clearCart, type CartItem } from '@/lib/shoppingCart';
 import { categoryLabel, groupByCategory, translations as matrixTranslations, type Lang } from '@/lib/productMatrix';
 
@@ -21,6 +22,9 @@ interface SavedListSummary {
   name: string | null;
   item_count: number;
   updated_at: string;
+  role: 'owner' | 'member';
+  owner_name: string | null;
+  member_count: number;
 }
 
 interface ShoppingListModalProps {
@@ -183,10 +187,14 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, country, cu
   // fallback. Grouping what's already loaded is instant and can't fail.
   const otherLabel = matrixTranslations[lang].other;
   const groups = useMemo(() => groupByCategory(products, otherLabel), [products, otherLabel]);
+  const { results: searchResults } = useProductSearch(searchTerm, country, lang);
 
   if (!isOpen) return null;
 
-  if (!currentUser?.access.lists) {
+  const isGold = !!currentUser?.access.lists;
+  // Without Gold you can't build lists, but lists others shared with you
+  // are still yours to open.
+  if (!isGold && !(myLists && myLists.length > 0)) {
     return (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl max-w-[28rem] w-full p-6">
@@ -213,11 +221,10 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, country, cu
     );
   }
 
-  const search = searchTerm.toLowerCase();
-  const matches = (name: string) => name.toLowerCase().includes(search);
-
+  // Same cross-language search as the main page: any language finds it.
+  const matching = new Set(filterBySearch(products, searchTerm, searchResults));
   const filteredCategories = groups
-    .map((cat) => ({ ...cat, rows: cat.rows.filter((p) => matches(p.name)) }))
+    .map((cat) => ({ ...cat, rows: cat.rows.filter((p) => matching.has(p)) }))
     .filter((cat) => cat.rows.length > 0);
 
   const isEmpty = filteredCategories.length === 0;
@@ -267,7 +274,7 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, country, cu
     }
   };
 
-  if (view === 'myLists') {
+  if (view === 'myLists' || !isGold) {
     return (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl max-w-[42rem] w-full max-h-[80vh] flex flex-col">
@@ -275,11 +282,11 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, country, cu
             <h2 className="text-2xl font-bold text-gray-900">{t.myLists}</h2>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setView('builder')}
+                onClick={() => (isGold ? setView('builder') : onNeedGold())}
                 className="px-4 py-2 rounded-lg font-semibold text-sm whitespace-nowrap"
                 style={{ backgroundColor: '#0b6e4f', color: 'white', border: 'none', cursor: 'pointer' }}
               >
-                {t.newList}
+                {isGold ? t.newList : `⭐ ${t.newList}`}
               </button>
               <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl" aria-label="Close">
                 ✕
@@ -293,8 +300,16 @@ export function ShoppingListModal({ isOpen, onClose, products, lang, country, cu
                 onClick={() => goToList(list.id)}
                 className="w-full text-left p-6 hover:bg-gray-50 transition-colors flex items-center justify-between"
               >
-                <span className="font-semibold text-gray-900">{list.name || t.unnamed}</span>
-                <span className="text-sm text-gray-500">{t.itemsCount(list.item_count)}</span>
+                <span className="min-w-0">
+                  <span className="block font-semibold text-gray-900 truncate">
+                    {(list.role === 'member' || list.member_count > 0) && '👥 '}
+                    {list.name || t.unnamed}
+                  </span>
+                  {list.role === 'member' && list.owner_name && (
+                    <span className="block text-xs text-gray-500">{at(lang, 'sharedShort', { owner: list.owner_name })}</span>
+                  )}
+                </span>
+                <span className="text-sm text-gray-500 whitespace-nowrap ml-3">{t.itemsCount(list.item_count)}</span>
               </button>
             ))}
           </div>

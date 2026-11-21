@@ -301,6 +301,29 @@ async def get_price_matrix(
         )
 
 
+@router.get("/search")
+async def search_products(
+    q: str = Query(..., min_length=1, max_length=100),
+    lang: str = Query("ukr", regex=LANG_REGEX),
+    country: str = Query("ME", regex=COUNTRY_REGEX),
+    limit: int = Query(60, ge=1, le=200),
+):
+    """Cross-language product search (see app/services/product_query.py),
+    the same one the Telegram bot uses. Returns ids in relevance order plus
+    name/unit - no prices, those stay behind the matrix endpoints' plan gate."""
+    from app.services.product_query import search_country
+
+    docs = await search_country(q, country, lang)
+    return {
+        "query": q,
+        "results": [
+            {"id": d["id"], "name": d["display_name"], "unit": d.get("unit", ""), "image_url": d.get("image_url")}
+            for d in docs[:limit]
+            if d.get("id")
+        ],
+    }
+
+
 @router.get("/list", response_model=ProductListResponse)
 async def get_product_list(
     limit: int = Query(50, ge=1, le=1000, description="Max results"),

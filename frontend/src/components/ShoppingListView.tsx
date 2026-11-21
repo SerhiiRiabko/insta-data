@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { authAPI, listsAPI, telegramBotLink, TELEGRAM_BOT_USERNAME, type Country, type CurrentUser } from '@/lib/api';
 import { at } from '@/lib/accountText';
+import { useProductSearch } from '@/lib/useProductSearch';
 import { formatPrice, type MatrixStore, type Lang } from '@/lib/productMatrix';
 
 export interface ShoppingListItem {
@@ -28,10 +29,15 @@ export interface ShoppingListData {
   total_cheapest: number;
   created_at: string;
   updated_at: string;
+  // Who's looking: owner | member | admin | guest (legacy ownerless list).
+  role: 'owner' | 'member' | 'admin' | 'guest' | null;
+  can_edit: boolean;
+  owner_name: string | null;
+  members: { id: string; name: string }[]; // owner only
 }
 
 type ShoppingListText = {
-  title: string; empty: string; cheapestAt: string; share: string; copied: string;
+  title: string; empty: string; cheapestAt: string;
   back: string; itemsCount: (n: number) => string; save: string; saving: string;
   saved: string; namePlaceholder: string; confirm: string; cancel: string;
 };
@@ -41,8 +47,6 @@ const translations: Record<Lang, ShoppingListText> = {
     title: 'Список покупок',
     empty: 'Список пуст',
     cheapestAt: 'Дешевле всего в',
-    share: 'Поделиться списком',
-    copied: 'Ссылка скопирована!',
     back: 'На главную',
     itemsCount: (n: number) => `${n} товар(ов)`,
     save: 'Сохранить список',
@@ -56,8 +60,6 @@ const translations: Record<Lang, ShoppingListText> = {
     title: 'Список покупок',
     empty: 'Список порожній',
     cheapestAt: 'Найдешевше в',
-    share: 'Поділитися списком',
-    copied: 'Посилання скопійовано!',
     back: 'На головну',
     itemsCount: (n: number) => `${n} товар(ів)`,
     save: 'Зберегти список',
@@ -71,8 +73,6 @@ const translations: Record<Lang, ShoppingListText> = {
     title: 'Shopping list',
     empty: 'List is empty',
     cheapestAt: 'Cheapest at',
-    share: 'Share list',
-    copied: 'Link copied!',
     back: 'Home',
     itemsCount: (n: number) => `${n} item(s)`,
     save: 'Save list',
@@ -86,8 +86,6 @@ const translations: Record<Lang, ShoppingListText> = {
     title: 'Lista za kupovinu',
     empty: 'Lista je prazna',
     cheapestAt: 'Najjeftinije u',
-    share: 'Podijeli listu',
-    copied: 'Link kopiran!',
     back: 'Početna',
     itemsCount: (n: number) => `${n} proizvod(a)`,
     save: 'Sačuvaj listu',
@@ -101,8 +99,6 @@ const translations: Record<Lang, ShoppingListText> = {
     title: 'Lista za kupovinu',
     empty: 'Lista je prazna',
     cheapestAt: 'Najjeftinije u',
-    share: 'Podeli listu',
-    copied: 'Link kopiran!',
     back: 'Početna',
     itemsCount: (n: number) => `${n} proizvod(a)`,
     save: 'Sačuvaj listu',
@@ -116,8 +112,6 @@ const translations: Record<Lang, ShoppingListText> = {
     title: 'Lista za kupovinu',
     empty: 'Lista je prazna',
     cheapestAt: 'Najjeftinije u',
-    share: 'Podijeli listu',
-    copied: 'Link kopiran!',
     back: 'Početna',
     itemsCount: (n: number) => `${n} proizvod(a)`,
     save: 'Sačuvaj listu',
@@ -129,6 +123,10 @@ const translations: Record<Lang, ShoppingListText> = {
   },
 };
 
+// Changes made in the bot (ticks, items added by other members) appear
+// without a reload.
+const SYNC_INTERVAL_MS = 15000;
+
 interface ShoppingListViewProps {
   data: ShoppingListData;
   lang: Lang;
@@ -138,18 +136,21 @@ interface ShoppingListViewProps {
 
 export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: ShoppingListViewProps) {
   const t = translations[lang];
-  const stores: MatrixStore[] = data.stores;
-  const [items, setItems] = useState(data.items);
-  const [copied, setCopied] = useState(false);
+  const [list, setList] = useState<ShoppingListData>(data);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [saved, setSaved] = useState(data.saved);
-  const [listName, setListName] = useState(data.name);
+  const [copied, setCopied] = useState(false);
   const [namingOpen, setNamingOpen] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [recipient, setRecipient] = useState('');
   const [sendState, setSendState] = useState<'idle' | 'sending' | 'sent' | 'notFound' | 'error'>('idle');
+  const [inviting, setInviting] = useState(false);
+  const [addQuery, setAddQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const busy = useRef(0); // in-flight writes: skip background sync meanwhile
+
+  const { results: addResults, loading: addLoading } = useProductSearch(addQuery, list.country, lang);
 
   useEffect(() => {
     authAPI
@@ -158,17 +159,87 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
       .catch(() => setCurrentUser(null));
   }, []);
 
-  // Saving and sending to a Telegram user are Gold features; viewing,
-  // ticking and sharing the link work for everyone who has the link.
+  const role = list.role;
+  const isOwner = role === 'owner';
+  const isMember = role === 'member';
   const isGold = !!currentUser?.access.lists;
+  const stores: MatrixStore[] = list.stores;
+  const items = list.items;
   const cheapestTotal = items
     .filter((i) => !i.checked && i.min_price !== null)
     .reduce((sum, i) => sum + (i.min_price as number), 0);
 
-  const shareToTelegram = () => {
-    const text = `${at(lang, 'shareMessage')}\n${telegramBotLink(`list_${data.id}`)}`;
-    const url = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const write = useCallback(async (fn: () => Promise<{ data: ShoppingListData }>, onError?: () => void) => {
+    busy.current += 1;
+    setError(null);
+    try {
+      const res = await fn();
+      setList(res.data);
+    } catch (err) {
+      console.error('List update failed:', err);
+      setError(at(lang, 'error'));
+      onError?.();
+    } finally {
+      busy.current -= 1;
+    }
+  }, [lang]);
+
+  // Background sync with whatever happened in Telegram.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible' || busy.current > 0) return;
+      listsAPI
+        .get(list.id, lang)
+        .then((res) => busy.current === 0 && setList(res.data))
+        .catch(() => undefined);
+    }, SYNC_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [list.id, lang]);
+
+  const toggle = (productId: string) => {
+    const flip = () =>
+      setList((prev) => ({
+        ...prev,
+        items: prev.items.map((i) => (i.product_id === productId ? { ...i, checked: !i.checked } : i)),
+      }));
+    flip(); // optimistic
+    write(() => listsAPI.toggleItem(list.id, productId, lang), flip);
+  };
+
+  const addProduct = (product: { id: string; name: string; unit: string }) =>
+    write(() => listsAPI.addItems(list.id, [{ product_id: product.id, name: product.name, unit: product.unit }], lang));
+
+  const removeProduct = (productId: string) => write(() => listsAPI.removeItem(list.id, productId, lang));
+
+  const removeMember = (userId: string) => write(() => listsAPI.removeMember(list.id, userId, lang));
+
+  const leave = async () => {
+    if (!currentUser) return;
+    try {
+      await listsAPI.removeMember(list.id, currentUser.id, lang);
+      onBack?.();
+    } catch {
+      setError(at(lang, 'error'));
+    }
+  };
+
+  const inviteViaTelegram = async () => {
+    if (inviting) return;
+    setInviting(true);
+    // Open the tab synchronously (popup blockers), then point it at the share URL.
+    const tab = window.open('', '_blank');
+    try {
+      const res = await listsAPI.invite(list.id);
+      const text = at(lang, 'shareMessage');
+      const url = `https://t.me/share/url?url=${encodeURIComponent(res.data.url)}&text=${encodeURIComponent(text)}`;
+      if (tab) tab.location.href = url;
+      else window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      tab?.close();
+      setError(at(lang, 'error'));
+    } finally {
+      setInviting(false);
+    }
   };
 
   const sendToUser = async (e: React.FormEvent) => {
@@ -176,7 +247,8 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
     if (!recipient.trim()) return;
     setSendState('sending');
     try {
-      await listsAPI.sendTelegram(data.id, recipient.trim(), lang);
+      const res = await listsAPI.addMember(list.id, recipient.trim(), lang);
+      setList(res.data);
       setSendState('sent');
       setRecipient('');
     } catch (err: any) {
@@ -189,9 +261,8 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
     setSaving(true);
     setSaveError(null);
     try {
-      const response = await listsAPI.save(data.id, nameInput.trim(), lang);
-      setSaved(true);
-      setListName(response.data.name);
+      const response = await listsAPI.save(list.id, nameInput.trim(), lang);
+      setList(response.data);
       setNamingOpen(false);
     } catch (err: any) {
       console.error('Failed to save list:', err);
@@ -201,19 +272,7 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
     }
   };
 
-  const toggle = async (productId: string) => {
-    // optimistic toggle - the backend persists the flip so anyone else
-    // viewing the same shared link picks it up on their next fetch/reload
-    setItems((prev) => prev.map((i) => (i.product_id === productId ? { ...i, checked: !i.checked } : i)));
-    try {
-      await listsAPI.toggleItem(data.id, productId, lang);
-    } catch (err) {
-      console.error('Failed to toggle item:', err);
-      setItems((prev) => prev.map((i) => (i.product_id === productId ? { ...i, checked: !i.checked } : i)));
-    }
-  };
-
-  const share = async () => {
+  const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
@@ -223,17 +282,25 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
     }
   };
 
+  const inList = new Set(items.map((i) => i.product_id));
+  const pill = { padding: '8px 16px', borderRadius: 9999, fontSize: 14, fontWeight: 600, cursor: 'pointer' } as const;
+
   return (
     <div className="w-full max-w-[42rem] mx-auto" style={{ fontFamily: 'inherit' }}>
       <div className="flex items-center justify-between mb-4 px-1 gap-3 flex-wrap">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-bold" style={{ color: '#0f3d2e' }}>
-            {listName || t.title}
+            {list.name || t.title}
           </h1>
           <p className="text-sm" style={{ color: '#7d9a8d' }}>
             {t.itemsCount(items.length)}
-            {cheapestTotal > 0 && ` · ${at(lang, 'cheapestTotal')}: ${formatPrice(cheapestTotal, lang, data.country)}`}
+            {cheapestTotal > 0 && ` · ${at(lang, 'cheapestTotal')}: ${formatPrice(cheapestTotal, lang, list.country)}`}
           </p>
+          {isMember && list.owner_name && (
+            <p className="text-xs mt-0.5" style={{ color: '#52736a' }}>
+              👥 {at(lang, 'sharedBy', { owner: list.owner_name })}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {onBack && (
@@ -245,87 +312,124 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
               {t.back}
             </button>
           )}
-          {isGold && (saved ? (
-            <span className="text-sm font-medium" style={{ color: '#05603a' }}>
-              {t.saved}
-            </span>
-          ) : (
+          {role === 'guest' && isGold && !list.saved && (
             <button
               onClick={() => setNamingOpen(true)}
-              className="rounded-full text-sm font-semibold"
-              style={{ padding: '8px 16px', backgroundColor: 'white', color: accent, border: `1px solid ${accent}`, cursor: 'pointer' }}
+              style={{ ...pill, backgroundColor: 'white', color: accent, border: `1px solid ${accent}` }}
             >
               {t.save}
             </button>
-          ))}
-          <button
-            onClick={share}
-            className="rounded-full text-sm font-semibold"
-            style={{
-              padding: '8px 16px',
-              backgroundColor: copied ? '#d8f3e3' : accent,
-              color: copied ? '#05603a' : 'white',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {copied ? t.copied : t.share}
-          </button>
+          )}
         </div>
       </div>
 
       <div className="flex items-center gap-2 mb-4 px-1 flex-wrap">
+        {isOwner && isGold && (
+          <button
+            onClick={inviteViaTelegram}
+            disabled={inviting}
+            title={at(lang, 'inviteHint')}
+            style={{ ...pill, backgroundColor: '#229ED9', color: 'white', border: 'none' }}
+          >
+            ✈️ {at(lang, 'inviteTelegram')}
+          </button>
+        )}
+        {role !== 'guest' && (
+          <a
+            href={telegramBotLink(`list_${list.id}`)}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ ...pill, backgroundColor: 'white', color: '#229ED9', border: '1px solid #229ED9' }}
+          >
+            {at(lang, 'openInBot')}
+          </a>
+        )}
         <button
-          onClick={shareToTelegram}
-          className="rounded-full text-sm font-semibold"
-          style={{ padding: '8px 16px', backgroundColor: '#229ED9', color: 'white', border: 'none', cursor: 'pointer' }}
+          onClick={copyLink}
+          style={{
+            ...pill,
+            backgroundColor: copied ? '#d8f3e3' : 'white',
+            color: copied ? '#05603a' : '#52736a',
+            border: `1px solid ${copied ? '#d8f3e3' : '#d0d9d5'}`,
+          }}
         >
-          ✈️ {at(lang, 'shareTelegram')}
+          {copied ? at(lang, 'linkCopied') : at(lang, 'copyLink')}
         </button>
-        <a
-          href={telegramBotLink(`list_${data.id}`)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-full text-sm font-semibold"
-          style={{ padding: '8px 16px', backgroundColor: 'white', color: '#229ED9', border: '1px solid #229ED9' }}
-        >
-          {at(lang, 'openInBot')}
-        </a>
+        {isMember && (
+          <button
+            onClick={leave}
+            style={{ ...pill, backgroundColor: 'white', color: '#b42318', border: '1px solid #f3c3bd' }}
+          >
+            {at(lang, 'leaveList')}
+          </button>
+        )}
       </div>
 
-      {isGold && (
-        <form onSubmit={sendToUser} className="mb-4 px-1">
-          <label className="block text-xs font-medium mb-1" style={{ color: '#52736a' }}>
-            {at(lang, 'sendToUser')}
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={recipient}
-              onChange={(e) => {
-                setRecipient(e.target.value);
-                if (sendState !== 'sending') setSendState('idle');
-              }}
-              placeholder="@username"
-              className="flex-1 px-3 py-2 border rounded-lg text-sm"
-              style={{ borderColor: '#d0d9d5' }}
-            />
-            <button
-              type="submit"
-              disabled={!recipient.trim() || sendState === 'sending'}
-              className="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
-              style={{ backgroundColor: sendState === 'sent' ? '#d8f3e3' : '#229ED9', color: sendState === 'sent' ? '#05603a' : 'white', border: 'none', cursor: 'pointer' }}
-            >
-              {sendState === 'sent' ? at(lang, 'sent') : at(lang, 'send')}
-            </button>
+      {isOwner && isGold && (
+        <div className="mb-4 px-1">
+          <form onSubmit={sendToUser}>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#52736a' }}>
+              {at(lang, 'addMemberLabel')}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={recipient}
+                onChange={(e) => {
+                  setRecipient(e.target.value);
+                  if (sendState !== 'sending') setSendState('idle');
+                }}
+                placeholder="@username"
+                className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm"
+                style={{ borderColor: '#d0d9d5' }}
+              />
+              <button
+                type="submit"
+                disabled={!recipient.trim() || sendState === 'sending'}
+                className="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
+                style={{ backgroundColor: '#229ED9', color: 'white', border: 'none', cursor: 'pointer' }}
+              >
+                {at(lang, 'send')}
+              </button>
+            </div>
+            {sendState === 'sent' && <p className="text-xs mt-2" style={{ color: '#05603a' }}>{at(lang, 'memberAdded')}</p>}
+            {sendState === 'notFound' && (
+              <p className="text-xs mt-2" style={{ color: '#b45309' }}>
+                {at(lang, 'userNotFound', { bot: TELEGRAM_BOT_USERNAME })}
+              </p>
+            )}
+            {sendState === 'error' && <p className="text-xs mt-2 text-red-600">{at(lang, 'error')}</p>}
+          </form>
+
+          <div className="mt-3">
+            <div className="text-xs font-medium mb-1" style={{ color: '#52736a' }}>
+              👥 {at(lang, 'members')}
+            </div>
+            {list.members.length === 0 ? (
+              <p className="text-xs" style={{ color: '#a3b5ae' }}>{at(lang, 'noMembers')}</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {list.members.map((m) => (
+                  <span
+                    key={m.id}
+                    className="inline-flex items-center gap-1 text-xs rounded-full"
+                    style={{ padding: '4px 6px 4px 10px', backgroundColor: '#eef5f1', color: '#0f3d2e' }}
+                  >
+                    {m.name}
+                    <button
+                      onClick={() => removeMember(m.id)}
+                      aria-label={at(lang, 'remove')}
+                      title={at(lang, 'remove')}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7d9a8d', padding: '0 4px' }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          {sendState === 'notFound' && (
-            <p className="text-xs mt-2" style={{ color: '#b45309' }}>
-              {at(lang, 'userNotFound', { bot: TELEGRAM_BOT_USERNAME })}
-            </p>
-          )}
-          {sendState === 'error' && <p className="text-xs mt-2 text-red-600">{at(lang, 'error')}</p>}
-        </form>
+        </div>
       )}
 
       {namingOpen && (
@@ -338,7 +442,7 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && confirmSave()}
-              className="flex-1 px-3 py-2 border rounded-lg text-sm"
+              className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm"
               style={{ borderColor: '#d0d9d5' }}
             />
             <button
@@ -360,6 +464,57 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
           {saveError && <p className="text-sm text-red-600 mt-2">{saveError}</p>}
         </div>
       )}
+
+      {list.can_edit ? (
+        <div className="mb-4 px-1">
+          <input
+            type="text"
+            value={addQuery}
+            onChange={(e) => setAddQuery(e.target.value)}
+            placeholder={`＋ ${at(lang, 'addSearchPlaceholder')}`}
+            aria-label={at(lang, 'addProducts')}
+            className="w-full px-3 py-2 border rounded-lg text-sm"
+            style={{ borderColor: '#d0d9d5', backgroundColor: 'white' }}
+          />
+          {addQuery.trim().length >= 2 && (
+            <div className="mt-1 bg-white rounded-lg border overflow-hidden" style={{ borderColor: '#e3eee8' }}>
+              {addLoading && !addResults ? (
+                <div className="px-3 py-2 text-sm" style={{ color: '#7d9a8d' }}>{at(lang, 'searching')}</div>
+              ) : !addResults || addResults.length === 0 ? (
+                <div className="px-3 py-2 text-sm" style={{ color: '#7d9a8d' }}>{at(lang, 'nothingFound')}</div>
+              ) : (
+                addResults.slice(0, 8).map((r, idx) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between gap-3 px-3 py-2"
+                    style={{ borderTop: idx > 0 ? '1px solid #f0f0f0' : 'none' }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm truncate" style={{ color: '#0f1419' }}>{r.name}</div>
+                      {r.unit && <div className="text-xs" style={{ color: '#a3b5ae' }}>{r.unit}</div>}
+                    </div>
+                    {inList.has(r.id) ? (
+                      <span className="text-xs whitespace-nowrap" style={{ color: '#05603a' }}>{at(lang, 'inList')}</span>
+                    ) : (
+                      <button
+                        onClick={() => addProduct(r)}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
+                        style={{ backgroundColor: accent, color: 'white', border: 'none', cursor: 'pointer' }}
+                      >
+                        ＋
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        isMember && <p className="mb-4 px-1 text-xs" style={{ color: '#b45309' }}>{at(lang, 'readOnly')}</p>
+      )}
+
+      {error && <p className="mb-3 px-1 text-sm text-red-600">{error}</p>}
 
       {items.length === 0 ? (
         <div className="text-center py-16" style={{ color: '#7d9a8d' }}>
@@ -419,7 +574,7 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
                       fontFamily: 'Space Grotesk, monospace',
                     }}
                   >
-                    {formatPrice(item.min_price, lang, data.country)}
+                    {formatPrice(item.min_price, lang, list.country)}
                   </div>
                   {item.cheapest_store && (
                     <div className="text-[10px]" style={{ color: '#a3b5ae' }}>
@@ -427,6 +582,17 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
                     </div>
                   )}
                 </div>
+
+                {list.can_edit && (
+                  <button
+                    onClick={() => removeProduct(item.product_id)}
+                    aria-label={at(lang, 'remove')}
+                    title={at(lang, 'remove')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4d1cb', fontSize: 14, padding: '0 2px', flexShrink: 0 }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {/* Prices by store, so a shared list also shows where each item is cheapest */}
@@ -458,7 +624,7 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
                             color: price === null ? '#ccc' : isCheapest ? '#05603a' : '#52736a',
                           }}
                         >
-                          {price === null ? '—' : formatPrice(price, lang, data.country)}
+                          {price === null ? '—' : formatPrice(price, lang, list.country)}
                         </div>
                       </div>
                     );
@@ -468,6 +634,12 @@ export function ShoppingListView({ data, lang, accent = '#0b6e4f', onBack }: Sho
             </div>
           ))}
         </div>
+      )}
+
+      {role !== 'guest' && (
+        <p className="text-[11px] text-center mt-3" style={{ color: '#a3b5ae' }}>
+          {at(lang, 'syncHint')}
+        </p>
       )}
     </div>
   );

@@ -99,7 +99,23 @@ export const productsAPI = {
 
   list: (limit: number = 50, skip: number = 0, lang: Lang = 'ukr') =>
     api.get('/products/list', { params: { limit, skip, lang } }),
+
+  // Cross-language search (same as the bot's): every stored translation is
+  // searched, and an unknown-language query is machine-translated into the
+  // catalog's language. Ids in relevance order + display name; no prices.
+  search: (q: string, country: Country, lang: Lang, limit = 60) =>
+    api.get<{ query: string; results: ProductSearchResult[] }>('/products/search', {
+      params: { q, country, lang, limit },
+      timeout: 20000,
+    }),
 };
+
+export interface ProductSearchResult {
+  id: string;
+  name: string;
+  unit: string;
+  image_url?: string | null;
+}
 
 /**
  * Countries API — backs the country selector (site header + admin store form).
@@ -118,9 +134,10 @@ export interface ShoppingListItemInput {
   unit: string;
 }
 
-// Creating/saving/editing a list and sending it to Telegram need the Gold
-// plan (403 `gold_required`); viewing and ticking items stay open to anyone
-// with the link.
+// Lists are private: the owner and the people it's shared with (members
+// join through the Telegram bot). GET of someone else's list -> 401
+// `login_required` / 403 `list_private`. Creating and sharing need Gold;
+// members tick and add/remove items on the owner's Gold.
 export const listsAPI = {
   create: (items: ShoppingListItemInput[], sessionId: string | null, country: Country, lang: Lang) =>
     api.post('/lists', { items, session_id: sessionId, country }, { params: { lang } }),
@@ -130,20 +147,29 @@ export const listsAPI = {
   toggleItem: (listId: string, productId: string, lang: Lang) =>
     api.patch(`/lists/${listId}/toggle`, { product_id: productId }, { params: { lang } }),
 
-  addItem: (listId: string, item: ShoppingListItemInput) =>
-    api.post(`/lists/${listId}/items`, item),
+  addItems: (listId: string, items: ShoppingListItemInput[], lang: Lang) =>
+    api.post(`/lists/${listId}/items/bulk`, { items }, { params: { lang } }),
 
-  removeItem: (listId: string, productId: string) =>
-    api.delete(`/lists/${listId}/items/${productId}`),
+  removeItem: (listId: string, productId: string, lang: Lang) =>
+    api.delete(`/lists/${listId}/items/${productId}`, { params: { lang } }),
 
-  // Phase 4.2 — requires an active session cookie (see authAPI below)
+  // Own lists + lists shared with me (`role`: owner | member).
   mine: () => api.get('/lists/mine'),
 
   save: (listId: string, name: string, lang: Lang) =>
     api.post(`/lists/${listId}/save`, { name }, { params: { lang } }),
 
-  sendTelegram: (listId: string, username: string, lang: Lang) =>
-    api.post(`/lists/${listId}/send-telegram`, { username, lang }),
+  // Share with a Telegram user (@username, Telegram id, or the email of an
+  // account with Telegram linked) - they get the list in the bot. 404
+  // `telegram_user_not_found` if they never started the bot.
+  addMember: (listId: string, identifier: string, lang: Lang) =>
+    api.post(`/lists/${listId}/members`, { identifier, lang }, { params: { lang } }),
+
+  removeMember: (listId: string, userId: string, lang: Lang) =>
+    api.delete(`/lists/${listId}/members/${userId}`, { params: { lang } }),
+
+  // Single-use t.me/<bot>?start=join_… link, valid 7 days.
+  invite: (listId: string) => api.post<{ token: string; url: string }>(`/lists/${listId}/invite`),
 };
 
 /**
