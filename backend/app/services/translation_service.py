@@ -353,7 +353,9 @@ async def translate_search_query(query: str, target: str) -> Optional[str]:
                         "model": settings.groq_model,
                         "messages": [
                             {"role": "system", "content": system},
-                            {"role": "user", "content": f'Reply with only {{"text": "..."}}.\n\nQuery: {query}'},
+                            # Groq's json_object mode rejects (400) messages
+                            # that don't mention "JSON".
+                            {"role": "user", "content": f'Reply with only a JSON object {{"text": "..."}}.\n\nQuery: {query}'},
                         ],
                         "temperature": 0,
                         # A one-word translation needs no deliberation; the
