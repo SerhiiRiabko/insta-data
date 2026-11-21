@@ -329,20 +329,40 @@ async def translate_batch(names: list[str], source: str, target: str) -> dict[st
 # nothing in any stored name, and cached there per country + query.
 # ---------------------------------------------------------------------------
 
+# Every language a product name is stored in: a hit in any of them counts,
+# so one near-miss (Serbian "hleb" vs. the Montenegrin catalog's "hljeb")
+# doesn't lose the result.
 QUERY_SYSTEM_PROMPT = (
     "You translate search queries typed into a grocery price-comparison site. "
-    "The query can be in any language. Translate it into {target} as the word(s) "
-    "a shop would use in a product name (singular, no explanations). Keep brand "
-    "names as they are. If it is already {target}, return it unchanged."
+    "The query can be in any language. Translate it into Montenegrin (ijekavian "
+    "spelling, e.g. mlijeko, hljeb), Ukrainian, Russian and English, each as the "
+    "word(s) a shop would use in a product name (singular, no explanations). Keep "
+    "brand names as they are."
 )
+QUERY_LOCALES = ("mne", "ukr", "rus", "eng")
 
 
 class _QueryOut(BaseModel):
-    text: str
+    mne: str
+    ukr: str
+    rus: str
+    eng: str
 
 
-async def translate_search_query(query: str, target: str) -> Optional[str]:
-    system = QUERY_SYSTEM_PROMPT.format(target=LOCALE_NAMES[target])
+def _query_alternatives(values: dict) -> list[str]:
+    seen, result = set(), []
+    for locale in QUERY_LOCALES:
+        text = str(values.get(locale) or "").strip()[:100]
+        if text and text.lower() not in seen:
+            seen.add(text.lower())
+            result.append(text)
+    return result
+
+
+async def translate_search_query(query: str) -> Optional[list[str]]:
+    """The query in every stored language (deduplicated), or None if no AI
+    step answered."""
+    system = QUERY_SYSTEM_PROMPT
     if settings.groq_api_key:
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -355,7 +375,10 @@ async def translate_search_query(query: str, target: str) -> Optional[str]:
                             {"role": "system", "content": system},
                             # Groq's json_object mode rejects (400) messages
                             # that don't mention "JSON".
-                            {"role": "user", "content": f'Reply with only a JSON object {{"text": "..."}}.\n\nQuery: {query}'},
+                            {"role": "user", "content": (
+                                'Reply with only a JSON object {"mne": "...", "ukr": "...", "rus": "...", "eng": "..."}.'
+                                f"\n\nQuery: {query}"
+                            )},
                         ],
                         "temperature": 0,
                         # A one-word translation needs no deliberation; the
@@ -365,9 +388,9 @@ async def translate_search_query(query: str, target: str) -> Optional[str]:
                     },
                 )
             response.raise_for_status()
-            text = str(json.loads(response.json()["choices"][0]["message"]["content"]).get("text", "")).strip()
-            if text:
-                return text[:100]
+            alternatives = _query_alternatives(json.loads(response.json()["choices"][0]["message"]["content"]))
+            if alternatives:
+                return alternatives
         except Exception as e:
             logger.info(f"Groq query translation failed for '{query}': {e}")
 
@@ -379,7 +402,7 @@ async def translate_search_query(query: str, target: str) -> Optional[str]:
     try:
         response = await client.messages.parse(
             model=settings.anthropic_model,
-            max_tokens=200,
+            max_tokens=400,
             system=system,
             messages=[{"role": "user", "content": query}],
             output_config={"effort": "low"},
@@ -392,4 +415,4 @@ async def translate_search_query(query: str, target: str) -> Optional[str]:
         await client.close()
     if response.parsed_output is None:
         return None
-    return response.parsed_output.text.strip()[:100] or None
+    return _query_alternatives(response.parsed_output.model_dump()) or None

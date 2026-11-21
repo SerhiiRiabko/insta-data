@@ -82,7 +82,7 @@ async def env(monkeypatch):
     from app.services import product_query, telegram_api
     monkeypatch.setattr(telegram_api, "call", fake_call)
 
-    async def no_ai(query, target):
+    async def no_ai(query):
         return None
 
     monkeypatch.setattr(product_query, "translate_search_query", no_ai)
